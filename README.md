@@ -14,6 +14,8 @@ Needs Flutter 3.29 or newer.
 cd nchemty_mobile
 # Generate the native iOS/Android shells (only once; keeps lib/ and pubspec)
 flutter create --org com.nchemty --project-name nchemty_mobile --platforms ios,android .
+# flutter create adds test/widget_test.dart for its counter demo; delete it:
+#   del test\widget_test.dart   (Windows)   or   rm test/widget_test.dart
 # flutter create names it com.nchemty.nchemty_mobile; set the store ID instead:
 #   iOS:     ios/Runner.xcodeproj -> PRODUCT_BUNDLE_IDENTIFIER = com.nchemty.ebank
 #   Android: android/app/build.gradle(.kts) -> applicationId = "com.nchemty.ebank"

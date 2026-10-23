@@ -124,7 +124,7 @@ class AuthController extends Notifier<AuthState> {
         localizedReason: 'Unlock Nchemty',
         options: const AuthenticationOptions(biometricOnly: true),
       );
-      return ok ? _resumeSession() : false;
+      return ok ? await _resumeSession() : false;
     } catch (_) {
       return false;
     }
