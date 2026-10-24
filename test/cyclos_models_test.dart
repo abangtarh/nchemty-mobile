@@ -1,24 +1,54 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nchemty_mobile/core/network/api_exception.dart';
+import 'package:nchemty_mobile/data/cyclos/cyclos_api.dart';
 import 'package:nchemty_mobile/data/models/models.dart';
 
 // Shapes follow the Nchemty Cyclos 4.16.17 openapi.json.
 void main() {
-  test('payment type uses the qualified internal name', () {
+  test('payment type keeps id and from-account type id', () {
     final t = PaymentType.fromJson({
       'id': '-123',
       'name': 'Member payment',
       'internalName': 'memberPayment',
       'from': {'id': '-9', 'internalName': 'memberAccount'},
     });
-    expect(t.id, 'memberAccount.memberPayment');
+    expect(t.id, '-123');
+    expect(t.fromId, '-9');
     expect(t.name, 'Member payment');
   });
 
-  test('payment type falls back to id without internal names', () {
-    final t = PaymentType.fromJson({'id': '-123', 'name': 'Pay'});
-    expect(t.id, '-123');
+  test('numeric identifiers are escaped like the official frontend', () {
+    expect(CyclosApi.escapeNumeric('677123456'), "'677123456");
+    expect(CyclosApi.escapeNumeric('jdoe'), 'jdoe');
+  });
+
+  test('timing builds Cyclos scheduling fields', () {
+    expect(PayScheduled(DateTime(2026, 11, 5)).toJson(), {
+      'scheduling': 'scheduled',
+      'installmentsCount': 1,
+      'firstInstallmentDate': '2026-11-05',
+    });
+    expect(
+        PayRecurring(firstDate: DateTime(2026, 11, 1), every: 2, unit: 'weeks').toJson(), {
+      'scheduling': 'recurring',
+      'firstOccurrenceDate': '2026-11-01',
+      'occurrenceInterval': {'amount': 2, 'field': 'weeks'},
+    });
+  });
+
+  test('data-for-perform lists the accounts to pay from', () {
+    final d = PaymentData.fromJson({
+      'accounts': [
+        {
+          'id': 'a1',
+          'type': {'id': '-9', 'internalName': 'memberAccount', 'name': 'Current'},
+          'status': {'balance': '5000', 'availableBalance': '4000'},
+        }
+      ],
+    });
+    expect(d.accounts.single.typeKey, '-9');
+    expect(d.accounts.single.available, 4000);
   });
 
   test('data-for-perform gives payee and types', () {

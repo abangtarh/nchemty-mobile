@@ -48,7 +48,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/history/:type',
         builder: (_, s) => HistoryScreen(accountType: s.pathParameters['type']!),
       ),
-      GoRoute(path: '/transfer', builder: (_, __) => const TransferScreen()),
+      GoRoute(
+        path: '/transfer',
+        builder: (_, s) => TransferScreen(args: s.extra as TransferArgs?),
+      ),
       GoRoute(path: '/momo/topup', builder: (_, __) => const TopupScreen()),
       GoRoute(path: '/momo/cashout', builder: (_, __) => const CashoutScreen()),
       GoRoute(path: '/products', builder: (_, __) => const ProductsScreen()),
