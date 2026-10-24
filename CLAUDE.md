@@ -17,6 +17,23 @@ Developer: Abang (Sure Engineering & Technologies). Develops on Windows 11
 - Stack: Riverpod 2.x, go_router 14, dio 5, flutter_secure_storage, local_auth,
   image_picker, mobile_scanner. EN/FR strings in `lib/core/l10n/strings.dart`.
 
+## Confirmed from the instance's openapi.json (Nchemty API 4.16.17)
+- Confirmation credential goes in the header **`confirmationPassword`** (not
+  `Confirmation-Password`). Send it only when the preview's
+  `confirmationPasswordInput` is present; OTP mode → `POST /auth/otp?medium=sms`.
+- Payments: `GET /self/payments/data-for-perform?to=` (toUser, paymentTypes) →
+  `POST /self/payments/preview` → `POST /self/payments`. `type` = id or
+  `fromAccountType.paymentType`.
+- Easy invoices (member QR): `/easy-invoices/qr-code/{to}`,
+  `/easy-invoices/data-for-perform/{to}`, `POST /easy-invoices/preview`,
+  `POST /easy-invoices`. Tickets: `POST /tickets`, `GET /tickets/{n}`
+  (`ticketStatus`), `/preview`, `/approve`, `/qr-code`.
+- Custom operations are exposed: `GET /{owner}/operations`,
+  `POST /{owner}/operations/{op}/run` — a possible no-hub route for
+  LoanCoreLib / ACAOCoreLib.
+- Device PINs (`/device-pins`) and FCM tokens (`/firebase/fcm-tokens`) exist.
+- Hub features are behind `--dart-define=HUB_ENABLED=true` (off by default).
+
 ## Confirmed facts
 - QR codes from the instance look like `https://ebank.nchemty.com/pay/{32-char code}`.
   The app resolves the code by trying `GET /tickets/{code}` first, else treats it
