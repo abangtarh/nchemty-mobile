@@ -86,63 +86,84 @@ class CyclosApi {
         );
       });
 
-  /// Find a payee by phone, account number or username (as Cyclos
-  /// keyword-search is configured for the member product).
+  /// Same as the official frontend's ApiHelper.escapeNumeric: a purely
+  /// numeric value is prefixed with `'` so Cyclos reads it as a phone or
+  /// account number instead of an internal id.
+  static String escapeNumeric(String value) {
+    final v = value.trim();
+    return RegExp(r'^[-+]?\d+$').hasMatch(v) ? "'$v" : v;
+  }
+
+  /// Quick search for the payee field (GET /users?keywords=…), excluding
+  /// the member themself — as the official user field does.
   Future<List<CyclosUser>> searchUsers(String keywords) => _guard(() async {
         final res = await _dio.get<List<dynamic>>(
           '/users',
-          queryParameters: {'keywords': keywords, 'pageSize': 10},
+          queryParameters: {
+            'keywords': keywords,
+            'pageSize': 10,
+            'usersToExclude': 'self',
+          },
         );
         return res.data!
             .map((e) => CyclosUser.fromJson((e as Map).cast<String, dynamic>()))
             .toList();
       });
 
-  /// POST /self/payments/preview — shows fees and total before confirming.
-  Future<PaymentPreview> previewPayment({
-    required String subject,
-    required num amount,
-    String? paymentType,
-    String? description,
-  }) =>
+  /// GET /users/{locator}/locate — finds a member by any identifier.
+  /// Use `*:<value>` to try every principal type (QR tokens included).
+  Future<CyclosUser> locateUser(String locator) => _guard(() async {
+        final res = await _dio.get<Map<String, dynamic>>(
+            '/users/${Uri.encodeComponent(locator)}/locate');
+        return CyclosUser.fromJson(res.data!);
+      });
+
+  /// GET /self/payments/data-for-perform.
+  ///  * no args: the accounts the member can pay from;
+  ///  * [to]: the payee and the payment types towards them;
+  ///  * [to] + [type]: the rules of that payment type.
+  Future<PaymentData> paymentData({String? to, String? type}) =>
       _guard(() async {
-        final res = await _dio.post<Map<String, dynamic>>(
-          '/self/payments/preview',
-          data: {
-            'subject': subject,
-            'amount': amount.toString(),
-            if (paymentType != null) 'type': paymentType,
-            if (description != null && description.isNotEmpty)
-              'description': description,
+        final res = await _dio.get<Map<String, dynamic>>(
+          '/self/payments/data-for-perform',
+          queryParameters: {
+            if (to != null) 'to': to,
+            if (type != null) 'type': type,
           },
         );
+        return PaymentData.fromJson(res.data!);
+      });
+
+  /// POST /self/payments/preview. [body] is a Cyclos PerformPayment:
+  /// subject, type, amount, description, scheduling fields.
+  Future<PaymentPreview> previewPayment(Map<String, dynamic> body) =>
+      _guard(() async {
+        final res = await _dio.post<Map<String, dynamic>>(
+            '/self/payments/preview',
+            data: body);
         return PaymentPreview.fromJson(res.data!);
       });
 
-  /// POST /self/payments. The confirmation password (transaction PIN or OTP)
-  /// goes in the `Confirmation-Password` header, never in the body.
-  Future<String> performPayment({
-    required String subject,
-    required num amount,
-    required String confirmationPassword,
-    String? paymentType,
-    String? description,
-  }) =>
+  /// POST /self/payments with the preview's normalised payment. Cyclos reads
+  /// the credential from the `confirmationPassword` header.
+  Future<String> performPayment(Map<String, dynamic> payment,
+          {String? confirmationPassword}) =>
       _guard(() async {
         final res = await _dio.post<Map<String, dynamic>>(
           '/self/payments',
-          data: {
-            'subject': subject,
-            'amount': amount.toString(),
-            if (paymentType != null) 'type': paymentType,
-            if (description != null && description.isNotEmpty)
-              'description': description,
-          },
-          options:
-              Options(headers: {'Confirmation-Password': confirmationPassword}),
+          data: payment,
+          options: Options(headers: {
+            if (confirmationPassword != null)
+              'confirmationPassword': confirmationPassword,
+          }),
         );
         return (res.data?['transactionNumber'] ?? res.data?['id']).toString();
       });
+
+  /// POST /auth/otp?medium=sms — sends a one-time code when the
+  /// confirmation password type is an OTP.
+  Future<void> sendOtp({String medium = 'sms'}) => _guard(
+      () => _dio.post<void>('/auth/otp', queryParameters: {'medium': medium}));
 }
 
 final cyclosApiProvider =

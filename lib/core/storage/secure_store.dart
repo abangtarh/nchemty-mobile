@@ -24,6 +24,7 @@ class SecureStore {
   static const _kPinSalt = 'local_pin_salt';
   static const _kBiometrics = 'biometrics_enabled';
   static const _kLocale = 'locale';
+  static const _kAccount = 'selected_account';
 
   Future<String?> readSession() => _s.read(key: _kSession);
   Future<void> writeSession(String token) =>
@@ -54,6 +55,10 @@ class SecureStore {
 
   Future<String?> readLocale() => _s.read(key: _kLocale);
   Future<void> writeLocale(String code) => _s.write(key: _kLocale, value: code);
+
+  Future<String?> readSelectedAccount() => _s.read(key: _kAccount);
+  Future<void> writeSelectedAccount(String id) =>
+      _s.write(key: _kAccount, value: id);
 
   /// Full wipe on logout or "forget this device".
   Future<void> wipe() => _s.deleteAll();

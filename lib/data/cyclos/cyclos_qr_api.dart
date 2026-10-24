@@ -5,18 +5,20 @@ import '../../core/config/env.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/network/dio_factory.dart';
 import '../../core/utils/money.dart';
+import '../models/models.dart';
 
-/// Native Cyclos QR payments (Tickets API). Two flows:
+/// Native Cyclos 4.16.17 QR payments, per the instance's openapi.json.
 ///
-/// * Easy invoice: a member's static or amount QR. Cyclos encodes a URL to
-///   its payment confirmation page; the payer pays the encoded user.
-///   QR image: GET /tickets/easy-invoice-qr-code/{user}?amount=...
-/// * Ticket: the receiver (shop, agent) creates a one-off ticket; the payer
-///   scans it and approves. POST /tickets -> GET /tickets/{n}/qr-code ->
-///   payer GET /tickets/{n} -> POST /tickets/{n}/preview -> /approve.
-///
-/// Paths are from the Cyclos Tickets API; confirm them against your 4.16.17
-/// /api/openapi.yaml (newer versions may expose easy invoices separately).
+/// * Easy invoice: a member's own QR (optionally with an amount).
+///   Image:   GET  /easy-invoices/qr-code/{to}?amount=&size=
+///   Payer:   GET  /easy-invoices/data-for-perform/{to}?amount=
+///            POST /easy-invoices/preview   {subject: to, amount, type}
+///            POST /easy-invoices           + `confirmationPassword` header
+/// * Ticket: a one-off charge created by the receiver (shop, agent).
+///   Create:  POST /tickets {amount, description} -> TransactionView
+///   Image:   GET  /tickets/{ticket}/qr-code
+///   Payer:   GET  /tickets/{ticket}; POST /tickets/{ticket}/preview;
+///            POST /tickets/{ticket}/approve + `confirmationPassword` header
 class CyclosQrApi {
   CyclosQrApi(this._dio, this._session);
   final Dio _dio;
@@ -30,68 +32,130 @@ class CyclosQrApi {
     }
   }
 
-  /// Headers for Image.network so the QR image loads with the session,
+  /// Headers for Image.network so QR images load with the session,
   /// without putting the token in the URL.
   Map<String, String> get imageHeaders => {
         if (_session.token != null) 'Session-Token': _session.token!,
         'Channel': Env.cyclosChannel,
       };
 
-  /// URL of the member's easy-invoice QR image. `user` must be a real
-  /// identifier (id or username), not `self`: the encoded URL is shared.
-  String easyInvoiceQrUrl(String user, {num? amount, String? description}) {
+  Options _confirm(String? credential) => Options(headers: {
+        if (credential != null) 'confirmationPassword': credential,
+      });
+
+  // ---- Easy invoices (member QR) ----
+
+  /// URL of an easy-invoice QR image for [to] (user id or principal).
+  String easyInvoiceQrUrl(String to, {num? amount, String? description, int size = 600}) {
     final q = <String, String>{
+      'size': '$size',
       if (amount != null && amount > 0) 'amount': amount.toString(),
-      if (description != null && description.isNotEmpty)
-        'description': description,
+      if (description != null && description.isNotEmpty) 'description': description,
     };
-    return Uri.parse('${Env.cyclosBaseUrl}/tickets/easy-invoice-qr-code/'
-            '${Uri.encodeComponent(user)}')
-        .replace(queryParameters: q.isEmpty ? null : q)
+    return Uri.parse('${Env.cyclosBaseUrl}/easy-invoices/qr-code/'
+            '${Uri.encodeComponent(to)}')
+        .replace(queryParameters: q)
         .toString();
   }
+
+  /// Payee, fixed amount and payment types for an easy invoice.
+  Future<EasyInvoiceData> easyInvoiceData(String to, {num? amount}) =>
+      _guard(() async {
+        final res = await _dio.get<Map<String, dynamic>>(
+          '/easy-invoices/data-for-perform/${Uri.encodeComponent(to)}',
+          queryParameters: {if (amount != null) 'amount': amount.toString()},
+        );
+        return EasyInvoiceData.fromJson(res.data!);
+      });
+
+  Map<String, dynamic> _easyBody(String to, num amount, String? type, String? description) => {
+        'subject': to,
+        'amount': amount.toString(),
+        if (type != null) 'type': type,
+        if (description != null && description.isNotEmpty) 'description': description,
+      };
+
+  Future<PaymentPreview> previewEasyInvoice(
+          {required String to, required num amount, String? type, String? description}) =>
+      _guard(() async {
+        final res = await _dio.post<Map<String, dynamic>>('/easy-invoices/preview',
+            data: _easyBody(to, amount, type, description));
+        return PaymentPreview.fromJson(res.data!);
+      });
+
+  Future<String> payEasyInvoice(
+          {required String to,
+          required num amount,
+          String? type,
+          String? description,
+          String? confirmationPassword}) =>
+      _guard(() async {
+        final res = await _dio.post<Map<String, dynamic>>('/easy-invoices',
+            data: _easyBody(to, amount, type, description),
+            options: _confirm(confirmationPassword));
+        return (res.data?['transactionNumber'] ?? res.data?['id']).toString();
+      });
 
   // ---- Tickets (merchant / agent QR) ----
 
   /// Receiver creates an open ticket and shows its QR.
   Future<String> createTicket({required num amount, String? description}) =>
       _guard(() async {
-        final res = await _dio.post<dynamic>('/tickets', data: {
+        final res = await _dio.post<Map<String, dynamic>>('/tickets', data: {
           'amount': amount.toString(),
-          if (description != null && description.isNotEmpty)
-            'description': description,
+          if (description != null && description.isNotEmpty) 'description': description,
         });
-        final data = res.data;
-        // Cyclos answers with the ticket number (string) or an object.
-        if (data is Map) return (data['ticketNumber'] ?? data['id']).toString();
-        return data.toString().replaceAll('"', '');
+        final data = res.data ?? const {};
+        return (data['ticketNumber'] ?? data['id']).toString();
       });
 
-  String ticketQrUrl(String ticket) =>
-      '${Env.cyclosBaseUrl}/tickets/${Uri.encodeComponent(ticket)}/qr-code';
+  String ticketQrUrl(String ticket, {int size = 600}) =>
+      '${Env.cyclosBaseUrl}/tickets/${Uri.encodeComponent(ticket)}/qr-code?size=$size';
 
   Future<TicketInfo> ticket(String number) => _guard(() async {
-        final res = await _dio.get<Map<String, dynamic>>('/tickets/$number');
+        final res = await _dio.get<Map<String, dynamic>>(
+            '/tickets/${Uri.encodeComponent(number)}');
         return TicketInfo.fromJson(res.data!);
       });
 
-  /// Payer previews the payment the ticket will generate (shows fees).
-  Future<Map<String, dynamic>> previewTicket(String number) => _guard(() async {
-        final res =
-            await _dio.post<Map<String, dynamic>>('/tickets/$number/preview');
-        return res.data ?? const {};
+  /// Payer previews the payment the ticket will generate.
+  Future<PaymentPreview> previewTicket(String number) => _guard(() async {
+        final res = await _dio.post<Map<String, dynamic>>(
+            '/tickets/${Uri.encodeComponent(number)}/preview');
+        return PaymentPreview.fromJson(res.data ?? const {});
       });
 
-  /// Payer approves; Cyclos checks the confirmation password.
-  Future<void> approveTicket(String number, String confirmationPassword) =>
+  /// Payer approves; Cyclos checks the confirmation credential if required.
+  Future<void> approveTicket(String number, String? confirmationPassword) =>
       _guard(() => _dio.post<void>(
-            '/tickets/$number/approve',
-            options: Options(
-                headers: {'Confirmation-Password': confirmationPassword}),
+            '/tickets/${Uri.encodeComponent(number)}/approve',
+            options: _confirm(confirmationPassword),
           ));
 
-  Future<void> cancelTicket(String number) =>
-      _guard(() => _dio.post<void>('/tickets/$number/cancel'));
+  Future<void> cancelTicket(String number) => _guard(
+      () => _dio.post<void>('/tickets/${Uri.encodeComponent(number)}/cancel'));
+}
+
+/// GET /easy-invoices/data-for-perform/{to} (Cyclos DataForEasyInvoice).
+class EasyInvoiceData {
+  EasyInvoiceData({required this.payee, required this.amount, required this.paymentTypes});
+  final CyclosUser? payee;
+  final num? amount;
+  final List<PaymentType> paymentTypes;
+
+  factory EasyInvoiceData.fromJson(Map<String, dynamic> j) {
+    final to = (j['to'] as Map?)?.cast<String, dynamic>();
+    final types = ((j['paymentTypes'] as List?) ?? const [])
+        .map((t) => PaymentType.fromJson((t as Map).cast<String, dynamic>()))
+        .toList();
+    final selected = (j['paymentTypeData'] as Map?)?.cast<String, dynamic>();
+    if (types.isEmpty && selected != null) types.add(PaymentType.fromJson(selected));
+    return EasyInvoiceData(
+      payee: to == null ? null : CyclosUser.fromJson(to),
+      amount: j['amount'] == null ? null : Money.parse(j['amount']),
+      paymentTypes: types,
+    );
+  }
 }
 
 class TicketInfo {
@@ -112,10 +176,13 @@ class TicketInfo {
   bool get isOpen => status.toLowerCase() == 'open';
 
   factory TicketInfo.fromJson(Map<String, dynamic> j) {
-    final to = (j['to'] as Map?) ?? (j['owner'] as Map?);
+    final toAccount = j['to'] as Map?;
+    final to = (j['payee'] as Map?) ??
+        (toAccount?['user'] as Map?) ??
+        toAccount;
     return TicketInfo(
       number: (j['ticketNumber'] ?? j['id']).toString(),
-      status: (j['status'] ?? '').toString(),
+      status: (j['ticketStatus'] ?? j['status'] ?? '').toString(),
       amount: Money.parse(j['amount']),
       payeeName: (to?['display'] ?? '').toString(),
       description: j['description']?.toString(),
@@ -132,8 +199,13 @@ sealed class ScannedQr {
   /// (confirmed from a real QR). Only QR codes for our own Cyclos host are
   /// accepted, so a look-alike domain can't be scanned into a payment.
   static ScannedQr? parse(String raw) {
-    final uri = Uri.tryParse(raw.trim());
-    if (uri == null || uri.scheme != 'https') return null;
+    final text = raw.trim();
+    if (text.isEmpty) return null;
+    final uri = Uri.tryParse(text);
+    // Not a link: a member identifier or QR token. The official frontend
+    // looks these up with the `*:` (any principal type) prefix.
+    if (uri == null || !uri.hasScheme) return PrincipalQr(text);
+    if (uri.scheme != 'https') return null;
     final cyclosHost = Uri.parse(Env.cyclosBaseUrl).host;
     if (uri.host.toLowerCase() != cyclosHost.toLowerCase()) return null;
     final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
@@ -165,6 +237,12 @@ sealed class ScannedQr {
     }
     return null;
   }
+}
+
+/// A raw identifier (username, phone, account number or QR token).
+class PrincipalQr extends ScannedQr {
+  const PrincipalQr(this.value);
+  final String value;
 }
 
 /// `/pay/{code}` before Cyclos has told us whether it is a ticket.

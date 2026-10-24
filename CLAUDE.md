@@ -17,6 +17,41 @@ Developer: Abang (Sure Engineering & Technologies). Develops on Windows 11
 - Stack: Riverpod 2.x, go_router 14, dio 5, flutter_secure_storage, local_auth,
   image_picker, mobile_scanner. EN/FR strings in `lib/core/l10n/strings.dart`.
 
+## Confirmed from the instance's openapi.json (Nchemty API 4.16.17)
+- Confirmation credential goes in the header **`confirmationPassword`** (not
+  `Confirmation-Password`). Send it only when the preview's
+  `confirmationPasswordInput` is present; OTP mode → `POST /auth/otp?medium=sms`.
+- Payments: `GET /self/payments/data-for-perform?to=` (toUser, paymentTypes) →
+  `POST /self/payments/preview` → `POST /self/payments`. `type` = id or
+  `fromAccountType.paymentType`.
+- Easy invoices (member QR): `/easy-invoices/qr-code/{to}`,
+  `/easy-invoices/data-for-perform/{to}`, `POST /easy-invoices/preview`,
+  `POST /easy-invoices`. Tickets: `POST /tickets`, `GET /tickets/{n}`
+  (`ticketStatus`), `/preview`, `/approve`, `/qr-code`.
+- Custom operations are exposed: `GET /{owner}/operations`,
+  `POST /{owner}/operations/{op}/run` — a possible no-hub route for
+  LoanCoreLib / ACAOCoreLib.
+- Device PINs (`/device-pins`) and FCM tokens (`/firebase/fcm-tokens`) exist.
+- Hub features are behind `--dart-define=HUB_ENABLED=true` (off by default).
+
+## Functional reference: official Cyclos frontend
+Workflows copy the official open-source frontend **cyclosproject/cyclos4-ui
+(v4.16.20)**, which uses the same API. Before building a flow, read its
+component (e.g. `src/app/ui/banking/payment/payment-step-form.component.ts`).
+Learned so far:
+- Payment order: from account → payee (quick search `GET /users?keywords=
+  &usersToExclude=self`) → types from `data-for-perform?to=` filtered by
+  `type.from.id == account.type.id` → `data-for-perform?to=&type=` for rules
+  (fixedAmount, maxInstallments, allowsRecurringPayments,
+  descriptionAvailability) → preview → perform with `preview.payment`.
+- Purely numeric identifiers must be sent as `'<digits>` (escapeNumeric),
+  otherwise Cyclos treats them as internal ids.
+- Scanned QR values identify the payee as `*:<value>` (any principal type,
+  QR tokens included) via `GET /users/{locator}/locate`.
+- The old Cyclos Mobile 2.15.2 (Cordova) app is NOT the base; it is only a
+  workflow reference. Its build uses Android package `org.nchemty.mobile` —
+  confirm which id is live on Play before release.
+
 ## Confirmed facts
 - QR codes from the instance look like `https://ebank.nchemty.com/pay/{32-char code}`.
   The app resolves the code by trying `GET /tickets/{code}` first, else treats it

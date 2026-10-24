@@ -27,6 +27,12 @@ class Env {
   static const mainAccountType =
       String.fromEnvironment('MAIN_ACCOUNT_TYPE', defaultValue: 'member');
 
+  /// Off until the hub's /v1 routes are deployed: MoMo, loans, savings and
+  /// KYC then show "coming soon" instead of failing.
+  /// Turn on with --dart-define=HUB_ENABLED=true.
+  static const hubEnabled =
+      bool.fromEnvironment('HUB_ENABLED', defaultValue: false);
+
   static const idleLockAfter = Duration(minutes: 5);
   static const backgroundLockAfter = Duration(seconds: 60);
 
