@@ -261,6 +261,14 @@ sealed class ScannedQr {
   static ScannedQr? parse(String raw) {
     final text = raw.trim();
     if (text.isEmpty) return null;
+    // Receipt slips printed before online verification existed.
+    if (text.startsWith('NCHEMTY|')) {
+      final p = text.split('|');
+      if (p.length >= 3) {
+        return ReceiptQr(p[1],
+            amount: num.tryParse(p[2].replaceAll(RegExp(r'[^0-9.]'), '')));
+      }
+    }
     final uri = Uri.tryParse(text);
     // Not a link: a member identifier or QR token. The official frontend
     // looks these up with the `*:` (any principal type) prefix.
@@ -270,6 +278,12 @@ sealed class ScannedQr {
     if (uri.host.toLowerCase() != cyclosHost.toLowerCase()) return null;
     final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
     final amountParam = num.tryParse(uri.queryParameters['amount'] ?? '');
+
+    // Receipt QR: <host>[/network]/run/verify-receipt?tx=..&a=..
+    if (segs.contains('verify-receipt') && uri.queryParameters['tx'] != null) {
+      return ReceiptQr(uri.queryParameters['tx']!,
+          amount: num.tryParse(uri.queryParameters['a'] ?? ''));
+    }
 
     // Native Cyclos pay link: /pay/{code}. Ticket or easy invoice is
     // decided by asking Cyclos (see the payment sheet).
@@ -311,6 +325,13 @@ class PayLinkQr extends ScannedQr {
   final String code;
   final num? amount;
   final String? description;
+}
+
+/// The QR printed on an Nchemty receipt: verify it, never pay it.
+class ReceiptQr extends ScannedQr {
+  const ReceiptQr(this.reference, {this.amount});
+  final String reference;
+  final num? amount;
 }
 
 class TicketQr extends ScannedQr {

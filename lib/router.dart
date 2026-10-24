@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'data/cyclos/cyclos_qr_api.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/pin_screen.dart';
@@ -13,6 +14,7 @@ import 'features/loans/products_screen.dart';
 import 'features/momo/momo_screens.dart';
 import 'features/operations/operation_screen.dart';
 import 'features/qr/qr_screens.dart';
+import 'features/receipts/verify_receipt_screen.dart';
 import 'features/transfer/transfer_screen.dart';
 
 /// Every route outside /auth requires an unlocked session; the redirect
@@ -69,6 +71,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/services', builder: (_, __) => const ServicesScreen()),
       GoRoute(path: '/qr/scan', builder: (_, __) => const ScanToPayScreen()),
       GoRoute(path: '/qr/receive', builder: (_, __) => const ReceiveQrScreen()),
+      GoRoute(
+        path: '/verify',
+        builder: (_, s) => VerifyReceiptScreen(scanned: s.extra as ReceiptQr?),
+      ),
     ],
   );
 });

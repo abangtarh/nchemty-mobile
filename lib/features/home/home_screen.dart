@@ -53,6 +53,7 @@ class HomeScreen extends ConsumerWidget {
                             : showComingSoon(context, s.t('verifyId'));
                       }
                       if (v == 'services') context.push('/services');
+                      if (v == 'verify') context.push('/verify');
                       if (v == 'products') {
                         _hub(context, '/products', 'Loans and savings');
                       }
@@ -66,6 +67,7 @@ class HomeScreen extends ConsumerWidget {
                     },
                     itemBuilder: (_) => [
                       const PopupMenuItem(value: 'services', child: Text('Services')),
+                      const PopupMenuItem(value: 'verify', child: Text('Verify a receipt')),
                       PopupMenuItem(value: 'products', child: Text(s.t('loansSavings'))),
                       PopupMenuItem(value: 'kyc', child: Text(s.t('verifyId'))),
                       const PopupMenuItem(value: 'lang', child: Text('English / Français')),

@@ -13,9 +13,10 @@ import '../../data/models/models.dart';
 String receiptQrData(TransferDetails t) {
   final ref = t.transactionNumber ?? t.id;
   if (Env.receiptVerifyUrl.isNotEmpty) {
-    return Uri.parse(Env.receiptVerifyUrl)
-        .replace(queryParameters: {'tx': ref})
-        .toString();
+    return Uri.parse(Env.receiptVerifyUrl).replace(queryParameters: {
+      'tx': ref,
+      'a': '${t.amount.abs().round()}',
+    }).toString();
   }
   return 'NCHEMTY|$ref|${t.amount.abs().round()} XAF|${t.date.toUtc().toIso8601String()}';
 }
@@ -123,7 +124,7 @@ Future<Uint8List> buildReceiptPdf(TransferDetails t, {String? printedFor}) async
               pw.Expanded(
                 child: pw.Text(
                   Env.receiptVerifyUrl.isNotEmpty
-                      ? 'Scan this code to verify the receipt online, or quote the reference at any Nchemty branch.'
+                      ? 'Scan this code with any phone camera to check online that Nchemty recorded this transaction, or quote the reference at any Nchemty branch.'
                       : 'To verify this receipt, quote the reference at any Nchemty branch. The code holds the reference, amount and time recorded by Nchemty.',
                   style: const pw.TextStyle(color: muted, fontSize: 9),
                 ),

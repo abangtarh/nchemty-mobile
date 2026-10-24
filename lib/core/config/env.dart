@@ -38,9 +38,20 @@ class Env {
   static const topupOperation = String.fromEnvironment('TOPUP_OPERATION');
   static const cashoutOperation = String.fromEnvironment('CASHOUT_OPERATION');
 
-  /// Optional public page that verifies a receipt; its QR then opens
-  /// `<url>?tx=<transaction number>`. Empty: the QR carries the reference.
-  static const receiptVerifyUrl = String.fromEnvironment('RECEIPT_VERIFY_URL');
+  static const _receiptVerifyDefine = String.fromEnvironment('RECEIPT_VERIFY_URL');
+
+  /// Public Cyclos custom web service that verifies a receipt
+  /// (docs/cyclos/receipt-verification.md). The receipt QR opens
+  /// `<url>?tx=<reference>&a=<amount>`. Defaults to
+  /// `<Cyclos host>/run/verify-receipt`; `off` disables it.
+  static String get receiptVerifyUrl {
+    if (_receiptVerifyDefine == 'off') return '';
+    if (_receiptVerifyDefine.isNotEmpty) return _receiptVerifyDefine;
+    final api = Uri.parse(cyclosBaseUrl);
+    final segs = api.pathSegments.where((s) => s.isNotEmpty).toList();
+    if (segs.isNotEmpty && segs.last == 'api') segs.removeLast();
+    return api.replace(pathSegments: [...segs, 'run', 'verify-receipt']).toString();
+  }
 
   static const idleLockAfter = Duration(minutes: 5);
   static const backgroundLockAfter = Duration(seconds: 60);

@@ -56,6 +56,11 @@ class _ScanToPayScreenState extends ConsumerState<ScanToPayScreen> {
     await _controller.stop();
     if (!mounted) return;
 
+    if (qr is ReceiptQr) {
+      context.pushReplacement('/verify', extra: qr);
+      return;
+    }
+
     _Resolved? r;
     ApiException? error;
     showDialog<void>(
@@ -145,6 +150,8 @@ class _ScanToPayScreenState extends ConsumerState<ScanToPayScreen> {
         return u == null
             ? null
             : _Resolved(args: TransferArgs(payee: u, amount: amount, description: description));
+      case ReceiptQr():
+        return null;
       case PrincipalQr(:final value):
         if (value.length >= 20 && await isTicket(value)) return _Resolved(ticket: value);
         final u = await locate(value);
@@ -296,6 +303,7 @@ class _QrPaymentSheetState extends ConsumerState<_QrPaymentSheet> {
           case EasyInvoiceQr(:final to, :final amount, :final description):
             return _loadEasy(to, amount, description);
           case PrincipalQr():
+          case ReceiptQr():
             throw ApiException('This QR code is not a payment.');
           case PayLinkQr(:final code, :final amount, :final description):
             TicketInfo? found;
