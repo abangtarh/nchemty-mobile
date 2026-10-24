@@ -107,38 +107,125 @@ class HistoryPage {
   final bool hasNext;
 }
 
+/// A payment type the member may use (Cyclos TransferTypeWithCurrency).
+class PaymentType {
+  PaymentType({required this.id, required this.name, required this.fromType});
+  final String id; // id or qualified internal name, sent as `type`
+  final String name;
+  final String? fromType; // source account type internal name
+
+  factory PaymentType.fromJson(Map<String, dynamic> j) {
+    final from = (j['from'] as Map?)?.cast<String, dynamic>();
+    final fromName = (from?['internalName'] ?? from?['id'])?.toString();
+    final internal = j['internalName']?.toString();
+    return PaymentType(
+      id: internal != null && fromName != null
+          ? '$fromName.$internal'
+          : j['id'].toString(),
+      name: (j['name'] ?? internal ?? '').toString(),
+      fromType: fromName,
+    );
+  }
+}
+
+/// GET /self/payments/data-for-perform?to=… (Cyclos DataForTransaction).
+class PaymentData {
+  PaymentData({required this.payee, required this.paymentTypes});
+  final CyclosUser? payee;
+  final List<PaymentType> paymentTypes;
+
+  factory PaymentData.fromJson(Map<String, dynamic> j) {
+    final to = (j['toUser'] as Map?)?.cast<String, dynamic>();
+    final types = (j['paymentTypes'] as List?) ?? const [];
+    final selected = (j['paymentTypeData'] as Map?)?.cast<String, dynamic>();
+    final list = types
+        .map((t) => PaymentType.fromJson((t as Map).cast<String, dynamic>()))
+        .toList();
+    if (list.isEmpty && selected != null) {
+      list.add(PaymentType.fromJson(selected));
+    }
+    return PaymentData(
+      payee: to == null ? null : CyclosUser.fromJson(to),
+      paymentTypes: list,
+    );
+  }
+}
+
+/// How Cyclos wants this action confirmed (Cyclos PasswordInput).
+class ConfirmationInput {
+  ConfirmationInput({
+    required this.label,
+    required this.isOtp,
+    required this.numeric,
+    required this.otpMediums,
+    required this.usable,
+  });
+
+  final String label;
+  final bool isOtp;
+  final bool numeric;
+  final List<String> otpMediums; // sms, email
+
+  /// False when only device/PIN/TOTP confirmation is allowed, which this
+  /// app version cannot provide yet.
+  final bool usable;
+
+  static ConfirmationInput? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final j = raw.cast<String, dynamic>();
+    final allowed = ((j['allowedCredentials'] as List?) ?? const ['password'])
+        .map((e) => e.toString())
+        .toList();
+    final pt = (j['passwordType'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return ConfirmationInput(
+      label: (pt['name'] ?? 'Transaction password').toString(),
+      isOtp: pt['mode'] == 'otp',
+      numeric: pt['onlyNumeric'] == true,
+      otpMediums: ((j['otpSendMediums'] as List?) ?? const [])
+          .map((e) => e.toString())
+          .toList(),
+      usable: allowed.contains('password'),
+    );
+  }
+}
+
 class PaymentPreview {
   PaymentPreview({
     required this.amount,
     required this.totalAmount,
     required this.fees,
     required this.recipient,
-    required this.requiresConfirmation,
-    required this.raw,
+    required this.confirmation,
+    this.confirmationMessage,
+    this.paymentTypeName,
   });
 
   final num amount;
   final num totalAmount;
   final num fees;
   final String recipient;
-  final bool requiresConfirmation;
+  final ConfirmationInput? confirmation;
+  final String? confirmationMessage;
+  final String? paymentTypeName;
 
-  /// Kept so the confirm call can send back exactly what was previewed.
-  final Map<String, dynamic> raw;
+  bool get requiresConfirmation => confirmation != null;
 
   factory PaymentPreview.fromJson(Map<String, dynamic> j) {
     final payment = (j['payment'] as Map?)?.cast<String, dynamic>() ?? const {};
     final fees = (j['fees'] as List?) ?? const [];
     final feeSum = fees.fold<num>(
         0, (sum, f) => sum + Money.parse((f as Map)['amount']));
-    final toUser = (j['toAccount'] as Map?)?['user'] as Map?;
+    final toAccount = (j['toAccount'] as Map?)?.cast<String, dynamic>();
+    final toUser = (toAccount?['user'] as Map?) ?? (j['to'] as Map?);
+    final amount = Money.parse(j['mainAmount'] ?? payment['amount']);
     return PaymentPreview(
-      amount: Money.parse(payment['amount'] ?? j['mainAmount']),
-      totalAmount: Money.parse(j['totalAmount'] ?? payment['amount']),
+      amount: amount,
+      totalAmount: j['totalAmount'] == null ? amount + feeSum : Money.parse(j['totalAmount']),
       fees: feeSum,
       recipient: (toUser?['display'] ?? payment['subject'] ?? '').toString(),
-      requiresConfirmation: j['confirmationPasswordInput'] != null,
-      raw: j,
+      confirmation: ConfirmationInput.fromJson(j['confirmationPasswordInput']),
+      confirmationMessage: j['confirmationMessage']?.toString(),
+      paymentTypeName: (j['paymentType'] as Map?)?['name']?.toString(),
     );
   }
 }
