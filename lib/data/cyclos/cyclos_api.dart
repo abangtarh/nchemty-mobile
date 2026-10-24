@@ -160,6 +160,13 @@ class CyclosApi {
         return (res.data?['transactionNumber'] ?? res.data?['id']).toString();
       });
 
+  /// GET /transfers/{key} — details of one history entry.
+  Future<TransferDetails> transfer(String key) => _guard(() async {
+        final res = await _dio.get<Map<String, dynamic>>(
+            '/transfers/${Uri.encodeComponent(key)}');
+        return TransferDetails.fromJson(res.data!);
+      });
+
   /// POST /auth/otp?medium=sms — sends a one-time code when the
   /// confirmation password type is an OTP.
   Future<void> sendOtp({String medium = 'sms'}) => _guard(

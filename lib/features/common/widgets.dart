@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/network/api_exception.dart';
@@ -51,6 +52,7 @@ class HistoryTile extends StatelessWidget {
     final when = DateFormat('d MMM, HH:mm').format(entry.date);
     return ListTile(
       contentPadding: EdgeInsets.zero,
+      onTap: () => context.push('/transfer-details/${Uri.encodeComponent(entry.key)}'),
       title: Text(entry.title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,

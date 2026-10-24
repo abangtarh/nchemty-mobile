@@ -6,6 +6,7 @@ import 'features/auth/auth_controller.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/pin_screen.dart';
 import 'features/history/history_screen.dart';
+import 'features/history/transfer_details_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/kyc/kyc_screen.dart';
 import 'features/loans/products_screen.dart';
@@ -56,6 +57,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/momo/cashout', builder: (_, __) => const CashoutScreen()),
       GoRoute(path: '/products', builder: (_, __) => const ProductsScreen()),
       GoRoute(path: '/kyc', builder: (_, __) => const KycScreen()),
+      GoRoute(
+        path: '/transfer-details/:key',
+        builder: (_, s) => TransferDetailsScreen(transferKey: s.pathParameters['key']!),
+      ),
       GoRoute(path: '/qr/scan', builder: (_, __) => const ScanToPayScreen()),
       GoRoute(path: '/qr/receive', builder: (_, __) => const ReceiveQrScreen()),
     ],
