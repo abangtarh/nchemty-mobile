@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -161,10 +162,32 @@ class CyclosApi {
       });
 
   /// GET /transfers/{key} — details of one history entry.
+  /// If [key] is a payment's transaction number rather than a transfer's,
+  /// falls back to GET /transactions/{key} and opens its generated transfer.
   Future<TransferDetails> transfer(String key) => _guard(() async {
-        final res = await _dio.get<Map<String, dynamic>>(
-            '/transfers/${Uri.encodeComponent(key)}');
-        return TransferDetails.fromJson(res.data!);
+        try {
+          final res = await _dio.get<Map<String, dynamic>>(
+              '/transfers/${Uri.encodeComponent(key)}');
+          return TransferDetails.fromJson(res.data!);
+        } on DioException catch (e) {
+          if (e.response?.statusCode != 404) rethrow;
+          final tx = await _dio.get<Map<String, dynamic>>(
+              '/transactions/${Uri.encodeComponent(key)}');
+          final transferId = (tx.data?['transfer'] as Map?)?['id'];
+          if (transferId == null) rethrow;
+          final res = await _dio.get<Map<String, dynamic>>('/transfers/$transferId');
+          return TransferDetails.fromJson(res.data!);
+        }
+      });
+
+  /// GET /transfers/{key}/export/{format} — the official Cyclos file
+  /// (e.g. PDF receipt) for one transfer.
+  Future<Uint8List> exportTransfer(String key, String format) => _guard(() async {
+        final res = await _dio.get<List<int>>(
+          '/transfers/${Uri.encodeComponent(key)}/export/${Uri.encodeComponent(format)}',
+          options: Options(responseType: ResponseType.bytes, headers: {'Accept': '*/*'}),
+        );
+        return Uint8List.fromList(res.data ?? const []);
       });
 
   /// POST /auth/otp?medium=sms — sends a one-time code when the

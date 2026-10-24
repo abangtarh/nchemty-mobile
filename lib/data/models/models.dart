@@ -140,7 +140,12 @@ class TransferDetails {
     this.fees = const [],
     this.statuses = const [],
     this.channel,
+    this.exportFormats = const [],
   });
+
+  /// Server-side exports Cyclos offers for this transfer: (internalName,
+  /// name). `pdf` is the official Cyclos receipt.
+  final List<(String, String)> exportFormats;
 
   final String id;
   final DateTime date;
@@ -197,6 +202,11 @@ class TransferDetails {
             if (v is Map && v['name'] != null) v['name'].toString(),
       ],
       channel: ((tx?['channel'] as Map?)?['name'])?.toString(),
+      exportFormats: [
+        for (final f in (j['exportFormats'] as List?) ?? const [])
+          if (f is Map)
+            ((f['internalName'] ?? f['id']).toString(), (f['name'] ?? '').toString()),
+      ],
     );
   }
 }

@@ -38,6 +38,10 @@ class Env {
   static const topupOperation = String.fromEnvironment('TOPUP_OPERATION');
   static const cashoutOperation = String.fromEnvironment('CASHOUT_OPERATION');
 
+  /// Optional public page that verifies a receipt; its QR then opens
+  /// `<url>?tx=<transaction number>`. Empty: the QR carries the reference.
+  static const receiptVerifyUrl = String.fromEnvironment('RECEIPT_VERIFY_URL');
+
   static const idleLockAfter = Duration(minutes: 5);
   static const backgroundLockAfter = Duration(seconds: 60);
 

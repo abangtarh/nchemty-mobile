@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nchemty_mobile/data/cyclos/cyclos_operations_api.dart';
+import 'package:nchemty_mobile/features/common/rich_content.dart';
 
 void main() {
   test('operation form reads fields, submit label and confirmation input', () {
@@ -43,5 +44,19 @@ void main() {
     expect(r.actions.single.op.scope, 'internal');
     expect(r.actions.single.parameters['amount'], '10000');
     expect(htmlToText(r.content!), 'Amount: 10 000\nFee: 74');
+  });
+
+  test('rich result tables become label/value rows', () {
+    final blocks = parseRichContent(
+        '<h3>Top-up not started</h3><p>Top-ups are not open for your account yet.</p>'
+        '<table><tr><td>Amount to credit</td><td>75 XAF</td></tr>'
+        '<tr><td>Service fees</td><td>10 XAF</td></tr></table>'
+        '<p>Nothing was charged.</p>');
+    expect(blocks.first, isA<RichHeading>());
+    expect((blocks.first as RichHeading).text, 'Top-up not started');
+    final rows = blocks.whereType<RichRow>().toList();
+    expect(rows.map((r) => r.label), ['Amount to credit', 'Service fees']);
+    expect(rows.first.value, '75 XAF');
+    expect(blocks.last, isA<RichParagraph>());
   });
 }

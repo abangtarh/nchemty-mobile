@@ -797,12 +797,19 @@ class _RequestPaymentTabState extends ConsumerState<_RequestPaymentTab>
                   ),
                 ],
               ),
-              if (paid && t.transactionNumber != null)
+              if (paid && t.transactionNumber != null) ...[
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text('Reference: ${t.transactionNumber}',
                       style: const TextStyle(color: AppColors.muted)),
                 ),
+                TextButton.icon(
+                  onPressed: () => context.push(
+                      '/transfer-details/${Uri.encodeComponent(CyclosApi.escapeNumeric(t.transactionNumber!))}'),
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  label: const Text('View receipt'),
+                ),
+              ],
             ]),
           ),
         ),

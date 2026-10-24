@@ -7,6 +7,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/cyclos/cyclos_api.dart';
 import '../../data/cyclos/cyclos_operations_api.dart';
+import '../common/rich_content.dart';
 import '../common/widgets.dart';
 import '../home/home_providers.dart';
 
@@ -291,12 +292,21 @@ class _OperationScreenState extends ConsumerState<OperationScreen> {
   }
 
   Widget _buildResult(BuildContext context, OperationResult r) {
-    final failed = r.isError;
+    // Only a notification carries an explicit outcome. Text results are the
+    // script's own message (a preview, or a refusal such as "not open for
+    // your account"), so they are shown neutrally, never as a success.
+    final isNotification = r.resultType == 'notification' || (r.content == null && r.notification != null);
+    final failed = r.isError || r.notificationLevel == 'warning';
     final body = r.content ?? r.notification;
+    final blocks = body == null || body.isEmpty
+        ? const <RichBlock>[]
+        : (r.resultType == 'plainText'
+            ? [for (final l in body.split('\n')) if (l.trim().isNotEmpty) RichParagraph(l.trim())]
+            : parseRichContent(body));
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        if (_finished)
+        if (isNotification && _finished)
           Center(
             child: Icon(
               failed ? Icons.error_outline : Icons.check_circle,
@@ -307,20 +317,11 @@ class _OperationScreenState extends ConsumerState<OperationScreen> {
         if (r.title?.isNotEmpty == true) ...[
           const SizedBox(height: 12),
           Text(r.title!,
-              textAlign: _finished ? TextAlign.center : TextAlign.start,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
         ],
-        if (body != null && body.isNotEmpty) ...[
+        if (blocks.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: SelectableText(
-                r.resultType == 'richText' ? htmlToText(body) : body,
-                style: const TextStyle(height: 1.45),
-              ),
-            ),
-          ),
+          RichContentView(blocks: blocks),
         ],
         if (r.url != null) ...[
           const SizedBox(height: 12),
@@ -358,14 +359,30 @@ class _OperationScreenState extends ConsumerState<OperationScreen> {
             child: const Text('Cancel'),
           )
         else
-          FilledButton(
-            onPressed: () => failed
-                ? setState(() {
-                    _result = null;
-                    _finished = false;
-                  })
-                : context.pop(),
-            child: Text(failed ? 'Try again' : 'Done'),
+          Row(children: [
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                onPressed: () => setState(() {
+                  _result = null;
+                  _finished = false;
+                }),
+                child: const Text('Start again'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton(
+                onPressed: () => context.pop(),
+                child: const Text('Close'),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          TextButton.icon(
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.receipt_long_outlined),
+            label: const Text('Check recent activity on Home'),
           ),
       ],
     );
