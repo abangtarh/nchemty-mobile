@@ -73,7 +73,7 @@ Future<Uint8List> buildReceiptPdf(TransferDetails t, {String? printedFor}) async
               children: [
                 pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
                   pw.Text('Nchemty Credit Union',
-                      style: pw.TextStyle(
+                      style: const pw.TextStyle(
                           color: PdfColors.white, fontSize: 13, fontWeight: pw.FontWeight.bold)),
                   pw.Text('Transaction receipt',
                       style: const pw.TextStyle(color: gold, fontSize: 10)),
@@ -85,7 +85,7 @@ Future<Uint8List> buildReceiptPdf(TransferDetails t, {String? printedFor}) async
           pw.SizedBox(height: 16),
           pw.Center(
             child: pw.Text(_xaf(t.amount),
-                style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+                style: const pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
           ),
           if (t.statuses.isNotEmpty)
             pw.Center(
