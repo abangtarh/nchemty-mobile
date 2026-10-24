@@ -4,11 +4,14 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/config/env.dart';
 import '../../core/l10n/strings.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/money.dart';
+import '../../data/cyclos/cyclos_operations_api.dart';
 import '../../data/models/models.dart';
 import '../auth/auth_controller.dart';
 import '../common/widgets.dart';
+import '../operations/operation_screen.dart';
 import 'home_providers.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -49,6 +52,7 @@ class HomeScreen extends ConsumerWidget {
                             ? context.push('/kyc')
                             : showComingSoon(context, s.t('verifyId'));
                       }
+                      if (v == 'services') context.push('/services');
                       if (v == 'products') {
                         _hub(context, '/products', 'Loans and savings');
                       }
@@ -61,6 +65,7 @@ class HomeScreen extends ConsumerWidget {
                       }
                     },
                     itemBuilder: (_) => [
+                      const PopupMenuItem(value: 'services', child: Text('Services')),
                       PopupMenuItem(value: 'products', child: Text(s.t('loansSavings'))),
                       PopupMenuItem(value: 'kyc', child: Text(s.t('verifyId'))),
                       const PopupMenuItem(value: 'lang', child: Text('English / Français')),
@@ -136,9 +141,9 @@ class HomeScreen extends ConsumerWidget {
                     _Action(Icons.north_east, s.t('send'), () => context.push('/transfer')),
                     _Action(Icons.south_west, 'Receive', () => context.push('/qr/receive')),
                     _Action(Icons.add, s.t('topUp'),
-                        () => _hub(context, '/momo/topup', 'MoMo top-up')),
+                        () => _openMomo(context, ref, topUp: true)),
                     _Action(Icons.phone_iphone, s.t('cashOut'),
-                        () => _hub(context, '/momo/cashout', 'MoMo cash-out')),
+                        () => _openMomo(context, ref, topUp: false)),
                   ])
                     Expanded(child: a),
                 ],
@@ -228,6 +233,38 @@ class _BalanceCard extends StatelessWidget {
           child: Padding(padding: const EdgeInsets.all(22), child: child),
         ),
       );
+}
+
+/// Top up / Cash out are Cyclos custom operations: use the configured
+/// internal name, else the first operation whose name matches; if none is
+/// found, show all services.
+Future<void> _openMomo(BuildContext context, WidgetRef ref, {required bool topUp}) async {
+  final configured = topUp ? Env.topupOperation : Env.cashoutOperation;
+  String norm(String v) => v.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+  final words = topUp ? ['topup', 'fund', 'deposit', 'recharge'] : ['cashout', 'withdraw', 'retrait'];
+  try {
+    final ops = await ref.read(cyclosOperationsApiProvider).list();
+    OperationDef? match;
+    for (final op in ops) {
+      final names = [op.internalName ?? '', op.name, op.label ?? ''].map(norm).join(' ');
+      if (configured.isNotEmpty
+          ? (op.internalName == configured || op.id == configured)
+          : words.any(names.contains)) {
+        match = op;
+        break;
+      }
+    }
+    if (!context.mounted) return;
+    if (match == null) {
+      context.push('/services');
+    } else {
+      context.push('/op',
+          extra: OperationArgs(match.key,
+              scope: match.scope, title: topUp ? 'Top up from MoMo' : 'Cash out to MoMo'));
+    }
+  } on ApiException catch (e) {
+    if (context.mounted) showApiError(context, e);
+  }
 }
 
 /// Hub features open only when the hub is enabled for this build.

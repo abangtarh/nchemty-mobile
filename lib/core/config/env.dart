@@ -33,6 +33,11 @@ class Env {
   static const hubEnabled =
       bool.fromEnvironment('HUB_ENABLED', defaultValue: false);
 
+  /// Internal names of the Cyclos custom operations behind the Top up and
+  /// Cash out buttons. Empty = find them by name ("top up", "cash out").
+  static const topupOperation = String.fromEnvironment('TOPUP_OPERATION');
+  static const cashoutOperation = String.fromEnvironment('CASHOUT_OPERATION');
+
   static const idleLockAfter = Duration(minutes: 5);
   static const backgroundLockAfter = Duration(seconds: 60);
 

@@ -11,6 +11,7 @@ import 'features/home/home_screen.dart';
 import 'features/kyc/kyc_screen.dart';
 import 'features/loans/products_screen.dart';
 import 'features/momo/momo_screens.dart';
+import 'features/operations/operation_screen.dart';
 import 'features/qr/qr_screens.dart';
 import 'features/transfer/transfer_screen.dart';
 
@@ -61,6 +62,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/transfer-details/:key',
         builder: (_, s) => TransferDetailsScreen(transferKey: s.pathParameters['key']!),
       ),
+      GoRoute(
+        path: '/op',
+        builder: (_, s) => OperationScreen(args: s.extra! as OperationArgs),
+      ),
+      GoRoute(path: '/services', builder: (_, __) => const ServicesScreen()),
       GoRoute(path: '/qr/scan', builder: (_, __) => const ScanToPayScreen()),
       GoRoute(path: '/qr/receive', builder: (_, __) => const ReceiveQrScreen()),
     ],
