@@ -454,50 +454,6 @@ class PaymentPreview {
   }
 }
 
-/// Middleware /v1 quote for cash-out (fee rules live server-side).
-class CashoutQuote {
-  CashoutQuote({
-    required this.quoteId,
-    required this.amount,
-    required this.fee,
-    required this.total,
-    required this.expiresAt,
-  });
-
-  final String quoteId;
-  final num amount;
-  final num fee;
-  final num total;
-  final DateTime expiresAt;
-
-  factory CashoutQuote.fromJson(Map<String, dynamic> j) => CashoutQuote(
-        quoteId: j['quoteId'].toString(),
-        amount: Money.parse(j['amount']),
-        fee: Money.parse(j['fee']),
-        total: Money.parse(j['total']),
-        expiresAt: DateTime.parse(j['expiresAt'].toString()),
-      );
-}
-
-enum MomoStatus { pending, successful, failed }
-
-class MomoRequest {
-  MomoRequest({required this.id, required this.status, this.message});
-  final String id;
-  final MomoStatus status;
-  final String? message;
-
-  factory MomoRequest.fromJson(Map<String, dynamic> j) => MomoRequest(
-        id: j['id'].toString(),
-        status: switch (j['status']?.toString().toUpperCase()) {
-          'SUCCESSFUL' => MomoStatus.successful,
-          'FAILED' || 'REJECTED' || 'TIMEOUT' => MomoStatus.failed,
-          _ => MomoStatus.pending,
-        },
-        message: j['message']?.toString(),
-      );
-}
-
 class Loan {
   Loan({
     required this.id,

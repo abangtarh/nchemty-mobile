@@ -27,8 +27,9 @@ class Env {
   static const mainAccountType =
       String.fromEnvironment('MAIN_ACCOUNT_TYPE', defaultValue: 'member');
 
-  /// Off until the hub's /v1 routes are deployed: MoMo, loans, savings and
-  /// KYC then show "coming soon" instead of failing.
+  /// Off until the hub's /v1 routes are deployed: loans and savings then
+  /// show "coming soon" instead of failing. (MoMo runs on Cyclos custom
+  /// operations; Verify ID opens the web KYC wizard, see [kycUrl].)
   /// Turn on with --dart-define=HUB_ENABLED=true.
   static const hubEnabled =
       bool.fromEnvironment('HUB_ENABLED', defaultValue: false);
@@ -52,6 +53,11 @@ class Env {
     if (segs.isNotEmpty && segs.last == 'api') segs.removeLast();
     return api.replace(pathSegments: [...segs, 'run', 'verify-receipt']).toString();
   }
+
+  /// Nchemty's web KYC wizard (selfie, liveness, document, OCR, face match).
+  /// Verify ID opens it in the in-app browser. Empty: Verify ID says it is
+  /// not available yet. Set with --dart-define=KYC_URL=https://...
+  static const kycUrl = String.fromEnvironment('KYC_URL');
 
   static const idleLockAfter = Duration(minutes: 5);
   static const backgroundLockAfter = Duration(seconds: 60);

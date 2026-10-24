@@ -11,6 +11,7 @@ import '../../data/cyclos/cyclos_operations_api.dart';
 import '../../data/models/models.dart';
 import '../auth/auth_controller.dart';
 import '../common/widgets.dart';
+import '../kyc/kyc_launcher.dart';
 import '../operations/operation_screen.dart';
 import 'home_providers.dart';
 
@@ -47,11 +48,7 @@ class HomeScreen extends ConsumerWidget {
                   PopupMenuButton<String>(
                     tooltip: 'Menu',
                     onSelected: (v) {
-                      if (v == 'kyc') {
-                        Env.hubEnabled
-                            ? context.push('/kyc')
-                            : showComingSoon(context, s.t('verifyId'));
-                      }
+                      if (v == 'kyc') openKycWizard(context, s.t('verifyId'));
                       if (v == 'services') context.push('/services');
                       if (v == 'verify') context.push('/verify');
                       if (v == 'products') {

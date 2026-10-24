@@ -40,8 +40,6 @@ class S {
     'txPin': {'en': 'Transaction PIN', 'fr': 'Code de transaction'},
     'done': {'en': 'Done', 'fr': 'Terminé'},
     'success': {'en': 'Payment sent', 'fr': 'Paiement effectué'},
-    'momoNumber': {'en': 'MoMo number', 'fr': 'Numéro MoMo'},
-    'youReceive': {'en': 'You receive on MoMo', 'fr': 'Vous recevez sur MoMo'},
     'approvePrompt': {'en': 'Approve the MTN prompt on your phone', 'fr': 'Validez la demande MTN sur votre téléphone'},
     'loansSavings': {'en': 'Loans and savings', 'fr': 'Prêts et épargne'},
     'verifyId': {'en': 'Verify your identity', 'fr': 'Vérifiez votre identité'},
