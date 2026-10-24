@@ -19,6 +19,12 @@ void main() {
   test('rejects other domains and plain http', () {
     expect(ScannedQr.parse('https://ebank-nchemty.com/pay/abc'), isNull);
     expect(ScannedQr.parse('http://ebank.nchemty.com/pay/abc'), isNull);
-    expect(ScannedQr.parse('hello'), isNull);
+    expect(ScannedQr.parse(''), isNull);
+  });
+
+  test('plain text is treated as a member identifier', () {
+    final qr = ScannedQr.parse(' jdoe ');
+    expect(qr, isA<PrincipalQr>());
+    expect((qr as PrincipalQr).value, 'jdoe');
   });
 }

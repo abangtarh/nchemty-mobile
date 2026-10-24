@@ -16,6 +16,7 @@ import '../../data/models/models.dart';
 import '../auth/auth_controller.dart';
 import '../common/widgets.dart';
 import '../home/home_providers.dart';
+import '../transfer/transfer_screen.dart';
 
 /// Scan a Cyclos QR (easy invoice or ticket), check the payee Cyclos
 /// returns (never the name inside the QR), then pay with the transaction PIN.
@@ -48,25 +49,106 @@ class _ScanToPayScreenState extends ConsumerState<ScanToPayScreen> {
     final qr = ScannedQr.parse(raw);
     if (qr == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('This is not a Nchemty payment QR.')));
+          const SnackBar(content: Text('This QR code is not from Nchemty.')));
       return;
     }
     _handling = true;
     await _controller.stop();
     if (!mounted) return;
-    final paid = await showModalBottomSheet<bool>(
+
+    _Resolved? r;
+    ApiException? error;
+    showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => _QrPaymentSheet(qr: qr),
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
+    try {
+      r = await _resolve(qr);
+    } on ApiException catch (e) {
+      error = e;
+    }
     if (!mounted) return;
-    if (paid == true) {
-      ref.invalidate(accountsProvider);
-      context.pop();
+    Navigator.of(context).pop(); // progress
+
+    if (r?.ticket != null) {
+      final paid = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (_) => _QrPaymentSheet(qr: TicketQr(r!.ticket!)),
+      );
+      if (!mounted) return;
+      if (paid == true) {
+        ref.invalidate(accountsProvider);
+        context.pop();
+        return;
+      }
+    } else if (r?.args != null) {
+      context.pushReplacement('/transfer', extra: r!.args);
+      return;
     } else {
-      _handling = false;
-      await _controller.start();
+      await showApiError(context,
+          error ?? ApiException('No member or payment matches this QR code.'),
+          title: 'Could not read this QR code');
+    }
+    _handling = false;
+    await _controller.start();
+  }
+
+  /// Same idea as the official frontend: a ticket is paid as a ticket;
+  /// anything else identifies the payee (`*:<value>` matches any principal,
+  /// QR tokens included) and continues in the normal Send form.
+  Future<_Resolved?> _resolve(ScannedQr qr) async {
+    final api = ref.read(cyclosApiProvider);
+    final qrApi = ref.read(cyclosQrApiProvider);
+
+    Future<bool> isTicket(String code) async {
+      try {
+        await qrApi.ticket(code);
+        return true;
+      } on ApiException catch (e) {
+        if (e.isNotFound || e.statusCode == 422 || e.statusCode == 403) return false;
+        rethrow;
+      }
+    }
+
+    Future<CyclosUser?> locate(String value) async {
+      try {
+        return await api.locateUser('*:$value');
+      } on ApiException catch (e) {
+        if (e.isNotFound || e.statusCode == 422) return null;
+        rethrow;
+      }
+    }
+
+    Future<CyclosUser?> easyInvoicePayee(String to) async {
+      try {
+        return (await qrApi.easyInvoiceData(to)).payee;
+      } on ApiException catch (e) {
+        if (e.isNotFound || e.statusCode == 422) return null;
+        rethrow;
+      }
+    }
+
+    switch (qr) {
+      case TicketQr(:final number):
+        return _Resolved(ticket: number);
+      case PayLinkQr(:final code, :final amount, :final description):
+        if (await isTicket(code)) return _Resolved(ticket: code);
+        final u = await locate(code) ?? await easyInvoicePayee(code);
+        return u == null
+            ? null
+            : _Resolved(args: TransferArgs(payee: u, amount: amount, description: description));
+      case EasyInvoiceQr(:final to, :final amount, :final description):
+        final u = await easyInvoicePayee(to) ?? await locate(to);
+        return u == null
+            ? null
+            : _Resolved(args: TransferArgs(payee: u, amount: amount, description: description));
+      case PrincipalQr(:final value):
+        if (value.length >= 20 && await isTicket(value)) return _Resolved(ticket: value);
+        final u = await locate(value);
+        return u == null ? null : _Resolved(args: TransferArgs(payee: u));
     }
   }
 
@@ -141,6 +223,12 @@ class _ScanToPayScreenState extends ConsumerState<ScanToPayScreen> {
   }
 }
 
+class _Resolved {
+  _Resolved({this.ticket, this.args});
+  final String? ticket;
+  final TransferArgs? args;
+}
+
 class _QrPaymentSheet extends ConsumerStatefulWidget {
   const _QrPaymentSheet({required this.qr});
   final ScannedQr qr;
@@ -207,6 +295,8 @@ class _QrPaymentSheetState extends ConsumerState<_QrPaymentSheet> {
             return _loadTicket(number);
           case EasyInvoiceQr(:final to, :final amount, :final description):
             return _loadEasy(to, amount, description);
+          case PrincipalQr():
+            throw ApiException('This QR code is not a payment.');
           case PayLinkQr(:final code, :final amount, :final description):
             TicketInfo? found;
             try {

@@ -4,27 +4,38 @@ import '../../core/utils/money.dart';
 /// freezed + json_serializable once the shapes settle.
 
 class CyclosUser {
-  CyclosUser({required this.id, required this.display, this.shortDisplay});
+  CyclosUser({required this.id, required this.display, this.shortDisplay, this.subtitle});
   final String id;
   final String display;
   final String? shortDisplay;
+
+  /// Secondary line in search results: username, phone or account number.
+  final String? subtitle;
 
   String get initials {
     final parts = display.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
     return parts.take(2).map((p) => p[0].toUpperCase()).join();
   }
 
-  factory CyclosUser.fromJson(Map<String, dynamic> j) => CyclosUser(
-        id: j['id'].toString(),
-        display: (j['display'] ?? j['name'] ?? '').toString(),
-        shortDisplay: j['shortDisplay']?.toString(),
-      );
+  factory CyclosUser.fromJson(Map<String, dynamic> j) {
+    final extra = [j['username'], j['accountNumber'], j['phone']]
+        .where((v) => v != null && v.toString().isNotEmpty)
+        .map((v) => v.toString())
+        .toList();
+    return CyclosUser(
+      id: j['id'].toString(),
+      display: (j['display'] ?? j['name'] ?? '').toString(),
+      shortDisplay: j['shortDisplay']?.toString(),
+      subtitle: extra.isEmpty ? null : extra.join(' · '),
+    );
+  }
 }
 
 class Account {
   Account({
     required this.id,
     required this.typeId,
+    required this.typeKey,
     required this.typeName,
     required this.number,
     required this.balance,
@@ -35,6 +46,9 @@ class Account {
 
   /// Account type internal name (or id) used in history URLs.
   final String typeId;
+
+  /// Account type id, as used by payment types' `from.id`.
+  final String typeKey;
   final String typeName;
   final String? number;
   final num balance;
@@ -54,6 +68,7 @@ class Account {
     return Account(
       id: j['id'].toString(),
       typeId: (type['internalName'] ?? type['id']).toString(),
+      typeKey: type['id'].toString(),
       typeName: (type['name'] ?? '').toString(),
       number: j['number']?.toString(),
       balance: Money.parse(status['balance']),
@@ -108,31 +123,74 @@ class HistoryPage {
 }
 
 /// A payment type the member may use (Cyclos TransferTypeWithCurrency).
+/// As in the official Cyclos frontend, the id is sent as `type` and
+/// types are filtered by `from.id` == the chosen account's type id.
 class PaymentType {
-  PaymentType({required this.id, required this.name, required this.fromType});
-  final String id; // id or qualified internal name, sent as `type`
+  PaymentType({required this.id, required this.name, required this.fromId});
+  final String id;
   final String name;
-  final String? fromType; // source account type internal name
+  final String? fromId;
 
   factory PaymentType.fromJson(Map<String, dynamic> j) {
     final from = (j['from'] as Map?)?.cast<String, dynamic>();
-    final fromName = (from?['internalName'] ?? from?['id'])?.toString();
-    final internal = j['internalName']?.toString();
     return PaymentType(
-      id: internal != null && fromName != null
-          ? '$fromName.$internal'
-          : j['id'].toString(),
-      name: (j['name'] ?? internal ?? '').toString(),
-      fromType: fromName,
+      id: j['id'].toString(),
+      name: (j['name'] ?? j['internalName'] ?? '').toString(),
+      fromId: from?['id']?.toString(),
     );
   }
 }
 
-/// GET /self/payments/data-for-perform?to=… (Cyclos DataForTransaction).
+/// Rules of one payment type (Cyclos TransactionTypeData), returned by
+/// data-for-perform when a `type` is given.
+class PaymentTypeRules {
+  PaymentTypeRules({
+    this.fixedAmount,
+    this.maxInstallments = 0,
+    this.allowsRecurring = false,
+    this.descriptionAvailability = 'optional',
+  });
+
+  final num? fixedAmount;
+
+  /// 0: only "now"; 1: also "on a date"; >1: also instalments.
+  final int maxInstallments;
+  final bool allowsRecurring;
+
+  /// disabled | optional | required
+  final String descriptionAvailability;
+
+  factory PaymentTypeRules.fromJson(Map<String, dynamic>? j) {
+    if (j == null) return PaymentTypeRules();
+    return PaymentTypeRules(
+      fixedAmount: j['fixedAmount'] == null ? null : Money.parse(j['fixedAmount']),
+      maxInstallments: (j['maxInstallments'] as num?)?.toInt() ?? 0,
+      allowsRecurring: j['allowsRecurringPayments'] == true,
+      descriptionAvailability: (j['descriptionAvailability'] ?? 'optional').toString(),
+    );
+  }
+}
+
+/// GET /self/payments/data-for-perform (Cyclos DataForTransaction).
 class PaymentData {
-  PaymentData({required this.payee, required this.paymentTypes});
+  PaymentData({
+    required this.payee,
+    required this.paymentTypes,
+    this.accounts = const [],
+    this.rules,
+    this.allowAutocomplete = true,
+    this.allowContacts = false,
+  });
   final CyclosUser? payee;
   final List<PaymentType> paymentTypes;
+
+  /// Accounts the member can pay from (only when no type is selected).
+  final List<Account> accounts;
+
+  /// Rules of the selected (or first) payment type.
+  final PaymentTypeRules? rules;
+  final bool allowAutocomplete;
+  final bool allowContacts;
 
   factory PaymentData.fromJson(Map<String, dynamic> j) {
     final to = (j['toUser'] as Map?)?.cast<String, dynamic>();
@@ -147,9 +205,66 @@ class PaymentData {
     return PaymentData(
       payee: to == null ? null : CyclosUser.fromJson(to),
       paymentTypes: list,
+      accounts: ((j['accounts'] as List?) ?? const [])
+          .map((a) => Account.fromJson((a as Map).cast<String, dynamic>()))
+          .toList(),
+      rules: selected == null ? null : PaymentTypeRules.fromJson(selected),
+      allowAutocomplete: j['allowAutocomplete'] != false,
+      allowContacts: j['allowContacts'] == true,
     );
   }
 }
+
+/// When a payment is processed (Cyclos PaymentSchedulingEnum + fields).
+sealed class PaymentTiming {
+  const PaymentTiming();
+  Map<String, dynamic> toJson();
+}
+
+class PayNow extends PaymentTiming {
+  const PayNow();
+  @override
+  Map<String, dynamic> toJson() => const {};
+}
+
+/// One payment on a future date (installmentsCount 1) or [count] monthly
+/// instalments starting on [firstDate].
+class PayScheduled extends PaymentTiming {
+  const PayScheduled(this.firstDate, {this.count = 1});
+  final DateTime firstDate;
+  final int count;
+  @override
+  Map<String, dynamic> toJson() => {
+        'scheduling': 'scheduled',
+        'installmentsCount': count,
+        'firstInstallmentDate': _isoDate(firstDate),
+      };
+}
+
+/// Repeats every [every] [unit] (days/weeks/months), [occurrences] times
+/// (null = until cancelled).
+class PayRecurring extends PaymentTiming {
+  const PayRecurring({
+    required this.firstDate,
+    this.every = 1,
+    this.unit = 'months',
+    this.occurrences,
+  });
+  final DateTime firstDate;
+  final int every;
+  final String unit;
+  final int? occurrences;
+  @override
+  Map<String, dynamic> toJson() => {
+        'scheduling': 'recurring',
+        'firstOccurrenceDate': _isoDate(firstDate),
+        'occurrenceInterval': {'amount': every, 'field': unit},
+        if (occurrences != null) 'occurrencesCount': occurrences,
+      };
+}
+
+String _isoDate(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
 /// How Cyclos wants this action confirmed (Cyclos PasswordInput).
 class ConfirmationInput {
@@ -198,6 +313,7 @@ class PaymentPreview {
     required this.confirmation,
     this.confirmationMessage,
     this.paymentTypeName,
+    this.payment = const {},
   });
 
   final num amount;
@@ -207,6 +323,13 @@ class PaymentPreview {
   final ConfirmationInput? confirmation;
   final String? confirmationMessage;
   final String? paymentTypeName;
+
+  /// The payment as Cyclos normalised it; sent back unchanged to perform,
+  /// exactly as the official frontend does.
+  final Map<String, dynamic> payment;
+
+  /// Cyclos says to perform without showing a confirmation step.
+  bool skipConfirmation = false;
 
   bool get requiresConfirmation => confirmation != null;
 
@@ -226,7 +349,8 @@ class PaymentPreview {
       confirmation: ConfirmationInput.fromJson(j['confirmationPasswordInput']),
       confirmationMessage: j['confirmationMessage']?.toString(),
       paymentTypeName: (j['paymentType'] as Map?)?['name']?.toString(),
-    );
+      payment: payment,
+    )..skipConfirmation = j['skipConfirmation'] == true;
   }
 }
 

@@ -199,8 +199,13 @@ sealed class ScannedQr {
   /// (confirmed from a real QR). Only QR codes for our own Cyclos host are
   /// accepted, so a look-alike domain can't be scanned into a payment.
   static ScannedQr? parse(String raw) {
-    final uri = Uri.tryParse(raw.trim());
-    if (uri == null || uri.scheme != 'https') return null;
+    final text = raw.trim();
+    if (text.isEmpty) return null;
+    final uri = Uri.tryParse(text);
+    // Not a link: a member identifier or QR token. The official frontend
+    // looks these up with the `*:` (any principal type) prefix.
+    if (uri == null || !uri.hasScheme) return PrincipalQr(text);
+    if (uri.scheme != 'https') return null;
     final cyclosHost = Uri.parse(Env.cyclosBaseUrl).host;
     if (uri.host.toLowerCase() != cyclosHost.toLowerCase()) return null;
     final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
@@ -232,6 +237,12 @@ sealed class ScannedQr {
     }
     return null;
   }
+}
+
+/// A raw identifier (username, phone, account number or QR token).
+class PrincipalQr extends ScannedQr {
+  const PrincipalQr(this.value);
+  final String value;
 }
 
 /// `/pay/{code}` before Cyclos has told us whether it is a ticket.

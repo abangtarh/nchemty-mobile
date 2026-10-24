@@ -34,6 +34,24 @@ Developer: Abang (Sure Engineering & Technologies). Develops on Windows 11
 - Device PINs (`/device-pins`) and FCM tokens (`/firebase/fcm-tokens`) exist.
 - Hub features are behind `--dart-define=HUB_ENABLED=true` (off by default).
 
+## Functional reference: official Cyclos frontend
+Workflows copy the official open-source frontend **cyclosproject/cyclos4-ui
+(v4.16.20)**, which uses the same API. Before building a flow, read its
+component (e.g. `src/app/ui/banking/payment/payment-step-form.component.ts`).
+Learned so far:
+- Payment order: from account → payee (quick search `GET /users?keywords=
+  &usersToExclude=self`) → types from `data-for-perform?to=` filtered by
+  `type.from.id == account.type.id` → `data-for-perform?to=&type=` for rules
+  (fixedAmount, maxInstallments, allowsRecurringPayments,
+  descriptionAvailability) → preview → perform with `preview.payment`.
+- Purely numeric identifiers must be sent as `'<digits>` (escapeNumeric),
+  otherwise Cyclos treats them as internal ids.
+- Scanned QR values identify the payee as `*:<value>` (any principal type,
+  QR tokens included) via `GET /users/{locator}/locate`.
+- The old Cyclos Mobile 2.15.2 (Cordova) app is NOT the base; it is only a
+  workflow reference. Its build uses Android package `org.nchemty.mobile` —
+  confirm which id is live on Play before release.
+
 ## Confirmed facts
 - QR codes from the instance look like `https://ebank.nchemty.com/pay/{32-char code}`.
   The app resolves the code by trying `GET /tickets/{code}` first, else treats it
