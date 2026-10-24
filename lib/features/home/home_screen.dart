@@ -49,6 +49,9 @@ class HomeScreen extends ConsumerWidget {
                             ? context.push('/kyc')
                             : showComingSoon(context, s.t('verifyId'));
                       }
+                      if (v == 'products') {
+                        _hub(context, '/products', 'Loans and savings');
+                      }
                       if (v == 'logout') ref.read(authProvider.notifier).logout();
                       if (v == 'lang') {
                         final isEn = ref.read(localeProvider).languageCode == 'en';
@@ -58,6 +61,7 @@ class HomeScreen extends ConsumerWidget {
                       }
                     },
                     itemBuilder: (_) => [
+                      PopupMenuItem(value: 'products', child: Text(s.t('loansSavings'))),
                       PopupMenuItem(value: 'kyc', child: Text(s.t('verifyId'))),
                       const PopupMenuItem(value: 'lang', child: Text('English / Français')),
                       PopupMenuItem(value: 'logout', child: Text(s.t('logout'))),
@@ -68,10 +72,8 @@ class HomeScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               _BalanceCard(
                 onTap: () {
-                  final list = accounts.valueOrNull;
-                  if (list != null && list.length > 1) {
-                    _pickAccount(context, ref, list, main.valueOrNull?.id);
-                  }
+                  final a = main.valueOrNull;
+                  if (a != null) context.push('/history/${a.typeId}');
                 },
                 child: main.when(
                   data: (a) => Column(
@@ -80,17 +82,14 @@ class HomeScreen extends ConsumerWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(a?.typeName ?? '',
-                                  style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.8))),
-                              if ((accounts.valueOrNull?.length ?? 0) > 1)
-                                Icon(Icons.expand_more,
-                                    size: 18,
-                                    color: Colors.white.withValues(alpha: 0.8)),
-                            ],
+                          Flexible(
+                            child: _AccountDropdown(
+                              accounts: accounts.valueOrNull ?? const [],
+                              selected: a,
+                              onChanged: (acc) => ref
+                                  .read(selectedAccountIdProvider.notifier)
+                                  .select(acc.id),
+                            ),
                           ),
                           Text(a?.maskedNumber ?? '',
                               style: TextStyle(
@@ -104,8 +103,19 @@ class HomeScreen extends ConsumerWidget {
                               fontSize: 32,
                               fontWeight: FontWeight.w800)),
                       const SizedBox(height: 4),
-                      Text(s.t('available'),
-                          style: const TextStyle(color: AppColors.goldLight)),
+                      Row(
+                        children: [
+                          Text(s.t('available'),
+                              style: const TextStyle(color: AppColors.goldLight)),
+                          const Spacer(),
+                          Text('History',
+                              style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  fontWeight: FontWeight.w600)),
+                          Icon(Icons.chevron_right,
+                              color: Colors.white.withValues(alpha: 0.85)),
+                        ],
+                      ),
                     ],
                   ),
                   loading: () => const SizedBox(
@@ -124,12 +134,11 @@ class HomeScreen extends ConsumerWidget {
                     _Action(Icons.qr_code_scanner, 'Scan', () => context.push('/qr/scan'),
                         highlight: true),
                     _Action(Icons.north_east, s.t('send'), () => context.push('/transfer')),
+                    _Action(Icons.south_west, 'Receive', () => context.push('/qr/receive')),
                     _Action(Icons.add, s.t('topUp'),
                         () => _hub(context, '/momo/topup', 'MoMo top-up')),
                     _Action(Icons.phone_iphone, s.t('cashOut'),
                         () => _hub(context, '/momo/cashout', 'MoMo cash-out')),
-                    _Action(Icons.account_balance_outlined, s.t('loans'),
-                        () => _hub(context, '/products', 'Loans and savings')),
                   ])
                     Expanded(child: a),
                 ],
@@ -141,8 +150,7 @@ class HomeScreen extends ConsumerWidget {
               accounts.when(
                 data: (list) => Column(
                   children: [
-                    for (final a in list
-                        .where((x) => x.id != main.valueOrNull?.id))
+                    for (final a in list)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Card(
@@ -150,16 +158,19 @@ class HomeScreen extends ConsumerWidget {
                             title: Text(a.typeName,
                                 style: const TextStyle(fontWeight: FontWeight.w600)),
                             subtitle: Text(a.maskedNumber),
-                            trailing: Text(Money.xaf(a.balance),
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    color: a.balance < 0
-                                        ? AppColors.debit
-                                        : AppColors.ink)),
-                            onTap: () => ref
-                                .read(selectedAccountIdProvider.notifier)
-                                .select(a.id),
-                            onLongPress: () => context.push('/history/${a.typeId}'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(Money.xaf(a.balance),
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: a.balance < 0
+                                            ? AppColors.debit
+                                            : AppColors.ink)),
+                                const Icon(Icons.chevron_right, color: AppColors.muted),
+                              ],
+                            ),
+                            onTap: () => context.push('/history/${a.typeId}'),
                           ),
                         ),
                       ),
@@ -228,41 +239,51 @@ void _hub(BuildContext context, String route, String feature) {
   }
 }
 
-Future<void> _pickAccount(BuildContext context, WidgetRef ref,
-    List<Account> accounts, String? currentId) {
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (c) => SafeArea(
-      child: ListView(
-        shrinkWrap: true,
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-            child: Text('Show account',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          ),
+/// Account switcher on the balance card (white on green).
+class _AccountDropdown extends StatelessWidget {
+  const _AccountDropdown({
+    required this.accounts,
+    required this.selected,
+    required this.onChanged,
+  });
+  final List<Account> accounts;
+  final Account? selected;
+  final ValueChanged<Account> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+        color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.w600);
+    if (accounts.length < 2 || selected == null) {
+      return Text(selected?.typeName ?? '', style: style, overflow: TextOverflow.ellipsis);
+    }
+    return DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        value: selected!.id,
+        isDense: true,
+        isExpanded: true,
+        dropdownColor: AppColors.greenDark,
+        iconEnabledColor: Colors.white,
+        style: style,
+        items: [
           for (final a in accounts)
-            ListTile(
-              leading: Icon(
-                a.id == currentId ? Icons.radio_button_checked : Icons.radio_button_off,
-                color: AppColors.green,
-              ),
-              title: Text(a.typeName, style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text(a.maskedNumber),
-              trailing: Text(Money.xaf(a.available),
-                  style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: a.balance < 0 ? AppColors.debit : AppColors.ink)),
-              onTap: () {
-                ref.read(selectedAccountIdProvider.notifier).select(a.id);
-                Navigator.pop(c);
-              },
+            DropdownMenuItem(
+              value: a.id,
+              child: Text('${a.typeName} · ${Money.xaf(a.available)}',
+                  overflow: TextOverflow.ellipsis),
             ),
         ],
+        selectedItemBuilder: (_) => [
+          for (final a in accounts)
+            Text(a.typeName, style: style, overflow: TextOverflow.ellipsis),
+        ],
+        onChanged: (id) {
+          final acc = accounts.where((a) => a.id == id).firstOrNull;
+          if (acc != null) onChanged(acc);
+        },
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _Action extends StatelessWidget {

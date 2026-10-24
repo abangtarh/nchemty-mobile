@@ -450,165 +450,489 @@ class _QrPaymentSheetState extends ConsumerState<_QrPaymentSheet> {
 
 /// Shows the member's Cyclos easy-invoice QR (optionally with an amount),
 /// or creates a one-off ticket for agents and shops.
-class ReceiveQrScreen extends ConsumerStatefulWidget {
+class ReceiveQrScreen extends ConsumerWidget {
   const ReceiveQrScreen({super.key});
+
   @override
-  ConsumerState<ReceiveQrScreen> createState() => _ReceiveQrScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Receive money'),
+          bottom: const TabBar(
+            labelColor: AppColors.green,
+            indicatorColor: AppColors.green,
+            tabs: [Tab(text: 'Request payment'), Tab(text: 'My QR code')],
+          ),
+        ),
+        body: const TabBarView(children: [_RequestPaymentTab(), _MyQrTab()]),
+      ),
+    );
+  }
 }
 
-class _ReceiveQrScreenState extends ConsumerState<ReceiveQrScreen> {
+/// Official "Receive QR payment" flow (cyclos4-ui receive-qr-payment):
+/// account → type (filtered by `to.id`) → amount/description → ticket QR →
+/// wait until paid. The app polls the ticket (the web uses push events).
+class _RequestPaymentTab extends ConsumerStatefulWidget {
+  const _RequestPaymentTab();
+  @override
+  ConsumerState<_RequestPaymentTab> createState() => _RequestPaymentTabState();
+}
+
+class _RequestPaymentTabState extends ConsumerState<_RequestPaymentTab>
+    with AutomaticKeepAliveClientMixin {
   final _amount = TextEditingController();
-  int? _requested;
-  String? _ticket;
-  String? _ticketStatus;
-  Timer? _poll;
-  String? _error;
-  // Captured up front: `ref` must not be used in dispose().
+  final _note = TextEditingController();
+  final _form = GlobalKey<FormState>();
   late final CyclosQrApi _api;
+
+  bool _loading = true;
+  bool _busy = false;
+  ApiException? _error;
+
+  List<Account> _accounts = const [];
+  List<PaymentType> _allTypes = const [];
+  Account? _account;
+  PaymentType? _type;
+  PaymentTypeRules? _rules;
+
+  TicketInfo? _ticket;
+  Timer? _poll;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
     _api = ref.read(cyclosQrApiProvider);
+    Future.microtask(_init);
   }
 
   @override
   void dispose() {
     _poll?.cancel();
-    _amount.dispose();
     final t = _ticket;
-    if (t != null && _ticketStatus == 'open') {
-      // Leave no open ticket behind.
-      _api.cancelTicket(t).ignore();
-    }
+    if (t != null && t.isOpen) _api.cancelTicket(t.number).ignore();
+    _amount.dispose();
+    _note.dispose();
     super.dispose();
   }
 
-  Future<void> _createTicket() async {
-    final amount = Money.fromInput(_amount.text);
-    if (amount == null || amount <= 0) {
-      setState(() => _error = 'Enter the amount to charge.');
-      return;
-    }
-    setState(() => _error = null);
+  Future<void> _run(Future<void> Function() body) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
-      final api = _api;
-      final number = await api.createTicket(amount: amount);
-      if (!mounted) {
-        api.cancelTicket(number).ignore();
-        return;
-      }
-      setState(() {
-        _ticket = number;
-        _ticketStatus = 'open';
-      });
-      _poll = Timer.periodic(const Duration(seconds: 3), (_) async {
-        try {
-          final t = await api.ticket(number);
-          if (!mounted) return;
-          setState(() => _ticketStatus = t.status.toLowerCase());
-          if (!t.isOpen) {
-            _poll?.cancel();
-            ref.invalidate(accountsProvider);
-          }
-        } on ApiException {
-          // Keep polling; a network blip should not end the sale.
-        }
-      });
+      await body();
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _loading = false;
+        });
+      }
     }
+  }
+
+  List<PaymentType> get _types => _allTypes
+      .where((t) => t.toId == null || t.toId == _account?.typeKey)
+      .toList();
+
+  Future<void> _init() => _run(() async {
+        final d = await _api.dataForNewTicket();
+        if (d.accounts.isEmpty || d.paymentTypes.isEmpty) {
+          throw ApiException('Your account cannot receive QR payments. Please contact Nchemty.');
+        }
+        if (!mounted) return;
+        setState(() {
+          _accounts = d.accounts;
+          _allTypes = d.paymentTypes;
+          _account = d.accounts.first;
+        });
+        await _pickType();
+      });
+
+  Future<void> _pickType([PaymentType? wanted]) async {
+    final types = _types;
+    if (types.isEmpty) {
+      setState(() {
+        _type = null;
+        _rules = null;
+      });
+      throw ApiException('This account cannot receive QR payments.');
+    }
+    final t = wanted ?? types.first;
+    setState(() {
+      _type = t;
+      _rules = null;
+    });
+    final d = await _api.dataForNewTicket(type: t.id);
+    if (!mounted) return;
+    setState(() {
+      _rules = d.rules ?? PaymentTypeRules();
+      final fixed = _rules!.fixedAmount;
+      if (fixed != null && fixed > 0) _amount.text = fixed.round().toString();
+    });
+  }
+
+  Future<void> _create() async {
+    if (!_form.currentState!.validate()) return;
+    await _run(() async {
+      final t = await _api.newTicket(
+        type: _type!.id,
+        amount: Money.fromInput(_amount.text)!,
+        description: _note.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() => _ticket = t);
+      _poll = Timer.periodic(const Duration(seconds: 3), (_) => _refresh());
+    });
+  }
+
+  Future<void> _refresh() async {
+    final t = _ticket;
+    if (t == null) return;
+    try {
+      final now = await _api.ticket(t.number);
+      if (!mounted) return;
+      setState(() => _ticket = TicketInfo(
+            number: t.number,
+            status: now.status,
+            amount: t.amount,
+            payeeName: t.payeeName,
+            description: t.description,
+            approveUrl: t.approveUrl,
+            transactionNumber: now.transactionNumber,
+          ));
+      if (!now.isOpen) {
+        _poll?.cancel();
+        if (now.isPaid) ref.invalidate(accountsProvider);
+      }
+    } on ApiException {
+      // A network blip should not end the sale; keep polling.
+    }
+  }
+
+  Future<void> _cancel() async {
+    final t = _ticket;
+    _poll?.cancel();
+    if (t != null && t.isOpen) {
+      await _run(() => _api.cancelTicket(t.number));
+    }
+    if (mounted) setState(() => _ticket = null);
+  }
+
+  void _newRequest() => setState(() {
+        _ticket = null;
+        _amount.clear();
+        _note.clear();
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    final t = _ticket;
+    return t == null ? _buildForm(context) : _buildTicket(context, t);
+  }
+
+  Widget _errorBox(BuildContext context) => _error == null
+      ? const SizedBox.shrink()
+      : Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(_error!.message, style: const TextStyle(color: AppColors.debit)),
+            if (_error!.details != null)
+              TextButton(
+                  onPressed: () => showApiError(context, _error!),
+                  child: const Text('Details')),
+          ]),
+        );
+
+  Widget _buildForm(BuildContext context) {
+    final s = S.of(ref);
+    final rules = _rules;
+    final descriptionMode = rules?.descriptionAvailability ?? 'optional';
+    return Form(
+      key: _form,
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          if (_accounts.length > 1)
+            DropdownButtonFormField<Account>(
+              initialValue: _account,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'To account'),
+              items: [
+                for (final a in _accounts)
+                  DropdownMenuItem(value: a, child: Text(a.typeName)),
+              ],
+              onChanged: _busy
+                  ? null
+                  : (a) {
+                      setState(() => _account = a);
+                      _run(_pickType);
+                    },
+            ),
+          if (_types.length > 1) ...[
+            const SizedBox(height: 16),
+            DropdownButtonFormField<PaymentType>(
+              key: ValueKey(_account?.id),
+              initialValue: _type,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Transfer type'),
+              items: [
+                for (final t in _types) DropdownMenuItem(value: t, child: Text(t.name)),
+              ],
+              onChanged: _busy ? null : (t) => _run(() => _pickType(t)),
+            ),
+          ],
+          if (rules != null) ...[
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _amount,
+              enabled: !_busy && (rules.fixedAmount ?? 0) <= 0,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+              decoration: InputDecoration(labelText: s.t('amount')),
+              validator: (v) =>
+                  (Money.fromInput(v ?? '') ?? 0) <= 0 ? 'Enter an amount' : null,
+            ),
+            if (descriptionMode != 'disabled') ...[
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _note,
+                enabled: !_busy,
+                maxLength: 100,
+                decoration: InputDecoration(
+                    labelText: descriptionMode == 'required' ? 'Description' : s.t('note')),
+                validator: (v) => descriptionMode == 'required' && (v == null || v.trim().isEmpty)
+                    ? 'A description is required'
+                    : null,
+              ),
+            ],
+          ],
+          _errorBox(context),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            onPressed: _busy || rules == null ? null : _create,
+            icon: const Icon(Icons.qr_code_2),
+            label: const Text('Show QR code'),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'The payer scans this code with the Nchemty app and confirms. This screen updates when the money arrives.',
+            style: TextStyle(color: AppColors.muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTicket(BuildContext context, TicketInfo t) {
+    final paid = t.isPaid;
+    final ended = !t.isOpen && !paid;
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(children: [
+              Text(Money.xaf(t.amount),
+                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+              if (t.description?.isNotEmpty == true)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(t.description!, style: const TextStyle(color: AppColors.muted)),
+                ),
+              const SizedBox(height: 16),
+              if (paid)
+                const SizedBox(
+                  height: 240,
+                  child: Center(
+                      child: Icon(Icons.check_circle, color: AppColors.credit, size: 120)),
+                )
+              else
+                Opacity(
+                  opacity: ended ? 0.25 : 1,
+                  child: Image.network(
+                    _api.ticketQrUrl(t.number),
+                    headers: _api.imageHeaders,
+                    width: 240,
+                    height: 240,
+                    semanticLabel: 'QR code to pay ${Money.xaf(t.amount)}',
+                    errorBuilder: (_, __, ___) => const SizedBox(
+                        width: 240,
+                        height: 240,
+                        child: Center(child: Text('Could not load the QR code'))),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (t.isOpen) ...[
+                    const SizedBox(
+                        width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                    const SizedBox(width: 10),
+                  ],
+                  Text(
+                    paid
+                        ? 'Paid'
+                        : t.isOpen
+                            ? 'Waiting for payment…'
+                            : 'This request ${t.status}',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: paid ? AppColors.credit : AppColors.ink),
+                  ),
+                ],
+              ),
+              if (paid && t.transactionNumber != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text('Reference: ${t.transactionNumber}',
+                      style: const TextStyle(color: AppColors.muted)),
+                ),
+            ]),
+          ),
+        ),
+        _errorBox(context),
+        const SizedBox(height: 16),
+        if (t.isOpen) ...[
+          if (t.approveUrl != null)
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: t.approveUrl!));
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Payment link copied')));
+              },
+              icon: const Icon(Icons.link),
+              label: const Text('Copy payment link'),
+            ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _busy ? null : _cancel,
+            child: const Text('Cancel request'),
+          ),
+        ] else
+          FilledButton(onPressed: _newRequest, child: const Text('New request')),
+      ],
+    );
+  }
+}
+
+/// The member's permanent "pay me" QR: their QR token if Cyclos issued one
+/// (the same codes as /pay/... links), else an easy-invoice QR with an
+/// optional amount.
+class _MyQrTab extends ConsumerStatefulWidget {
+  const _MyQrTab();
+  @override
+  ConsumerState<_MyQrTab> createState() => _MyQrTabState();
+}
+
+class _MyQrTabState extends ConsumerState<_MyQrTab>
+    with AutomaticKeepAliveClientMixin {
+  final _amount = TextEditingController();
+  late final CyclosQrApi _api;
+  bool _loading = true;
+  String? _tokenId;
+  int? _requested;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _api = ref.read(cyclosQrApiProvider);
+    Future.microtask(() async {
+      String? id;
+      try {
+        id = await _api.myQrTokenId();
+      } on ApiException {
+        id = null; // fall back to the easy-invoice QR
+      }
+      if (mounted) {
+        setState(() {
+          _tokenId = id;
+          _loading = false;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final user = ref.watch(authProvider.select((a) => a.user));
-    final api = _api;
-    final main = ref.watch(mainAccountProvider).valueOrNull;
-    final ticket = _ticket;
-    final qrUrl = ticket != null
-        ? api.ticketQrUrl(ticket)
-        : (user == null ? null : api.easyInvoiceQrUrl(user.id, amount: _requested));
-
-    return Scaffold(
-      backgroundColor: AppColors.green,
-      appBar: AppBar(
-        backgroundColor: AppColors.green,
-        foregroundColor: Colors.white,
-        title: const Text('Receive money',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    Text(user?.display ?? '',
-                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-                    if (main != null)
-                      Text('${main.typeName} ${main.maskedNumber}',
-                          style: const TextStyle(color: AppColors.muted)),
-                    const SizedBox(height: 16),
-                    if (qrUrl != null)
-                      Image.network(
-                        qrUrl,
-                        key: ValueKey(qrUrl),
-                        headers: api.imageHeaders,
-                        width: 232,
-                        height: 232,
-                        semanticLabel: 'QR code for receiving a payment',
-                        errorBuilder: (_, __, ___) => const SizedBox(
-                            width: 232,
-                            height: 232,
-                            child: Center(child: Text('Could not load the QR code'))),
-                      ),
-                    const SizedBox(height: 12),
-                    if (ticket != null)
-                      Text(switch (_ticketStatus) {
-                        'open' => 'Waiting for the customer to pay…',
-                        'processed' || 'approved' => 'Paid',
-                        _ => 'Ticket ${_ticketStatus ?? ''}',
-                      },
-                          style: const TextStyle(fontWeight: FontWeight.w700))
-                    else if (_requested != null)
-                      Text(Money.xaf(_requested),
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            if (ticket == null) ...[
-              TextField(
-                controller: _amount,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                    labelText: 'Ask for an amount (optional)'),
-                onChanged: (v) => setState(() => _requested = Money.fromInput(v)),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                Text(_error!, style: const TextStyle(color: AppColors.goldLight)),
-              ],
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    // A fixed amount needs the easy-invoice QR; the token QR has none.
+    final useToken = _tokenId != null && (_requested ?? 0) <= 0;
+    final url = useToken
+        ? _api.tokenQrUrl(_tokenId!)
+        : (user == null ? null : _api.easyInvoiceQrUrl(user.id, amount: _requested));
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(children: [
+              Text(user?.display ?? '',
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
               const SizedBox(height: 16),
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: const BorderSide(color: Colors.white54),
-                  minimumSize: const Size.fromHeight(52),
+              if (url != null)
+                Image.network(
+                  url,
+                  key: ValueKey(url),
+                  headers: _api.imageHeaders,
+                  width: 240,
+                  height: 240,
+                  semanticLabel: 'Your QR code for receiving payments',
+                  errorBuilder: (_, __, ___) => const SizedBox(
+                      width: 240,
+                      height: 240,
+                      child: Center(child: Text('Could not load the QR code'))),
                 ),
-                onPressed: _createTicket,
-                child: const Text('Charge a customer (one-time QR)'),
-              ),
-            ],
-          ],
+              if ((_requested ?? 0) > 0) ...[
+                const SizedBox(height: 12),
+                Text(Money.xaf(_requested),
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+              ],
+            ]),
+          ),
         ),
-      ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _amount,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: const InputDecoration(labelText: 'Ask for an amount (optional)'),
+          onChanged: (v) => setState(() => _requested = Money.fromInput(v)),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Anyone with the Nchemty app can scan this code to pay you. For a sale, use Request payment so you see when it is paid.',
+          style: TextStyle(color: AppColors.muted),
+        ),
+      ],
     );
   }
 }

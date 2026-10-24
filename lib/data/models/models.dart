@@ -126,17 +126,22 @@ class HistoryPage {
 /// As in the official Cyclos frontend, the id is sent as `type` and
 /// types are filtered by `from.id` == the chosen account's type id.
 class PaymentType {
-  PaymentType({required this.id, required this.name, required this.fromId});
+  PaymentType({required this.id, required this.name, required this.fromId, this.toId});
   final String id;
   final String name;
   final String? fromId;
 
+  /// Destination account type id (used when receiving: tickets).
+  final String? toId;
+
   factory PaymentType.fromJson(Map<String, dynamic> j) {
     final from = (j['from'] as Map?)?.cast<String, dynamic>();
+    final to = (j['to'] as Map?)?.cast<String, dynamic>();
     return PaymentType(
       id: j['id'].toString(),
       name: (j['name'] ?? j['internalName'] ?? '').toString(),
       fromId: from?['id']?.toString(),
+      toId: to?['id']?.toString(),
     );
   }
 }
