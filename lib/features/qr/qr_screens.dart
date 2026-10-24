@@ -513,9 +513,9 @@ class _RequestPaymentTabState extends ConsumerState<_RequestPaymentTab>
 
   @override
   void dispose() {
+    // Like the official app, leaving does not cancel the request: the payer
+    // may still be paying. It ends when paid, cancelled, or after it expires.
     _poll?.cancel();
-    final t = _ticket;
-    if (t != null && t.isOpen) _api.cancelTicket(t.number).ignore();
     _amount.dispose();
     _note.dispose();
     super.dispose();
@@ -729,7 +729,7 @@ class _RequestPaymentTabState extends ConsumerState<_RequestPaymentTab>
           ),
           const SizedBox(height: 12),
           const Text(
-            'The payer scans this code with the Nchemty app and confirms. This screen updates when the money arrives.',
+            'The payer scans this code with the Nchemty app and confirms. Keep this screen open to see when the money arrives; the request stays valid for a day unless you cancel it.',
             style: TextStyle(color: AppColors.muted),
           ),
         ],
