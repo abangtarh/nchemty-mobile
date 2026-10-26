@@ -33,7 +33,7 @@ class RichTable extends RichBlock {
   final List<List<String>> rows;
 }
 
-final _ci = (String p) => RegExp(p, caseSensitive: false, dotAll: true);
+RegExp _ci(String p) => RegExp(p, caseSensitive: false, dotAll: true);
 final _rowRe = _ci(r'<tr\b[^>]*>(.*?)</tr\s*>');
 final _cellRe = _ci(r'<(t[dh])\b[^>]*>(.*?)</\1\s*>');
 final _tableRe = _ci(r'<table\b[^>]*>(.*?)</table\s*>');

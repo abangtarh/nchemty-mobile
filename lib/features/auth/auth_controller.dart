@@ -160,6 +160,15 @@ class AuthController extends Notifier<AuthState> {
     return _resumeSession(pin);
   }
 
+  /// Whether this phone has fingerprint / Face ID set up.
+  Future<bool> biometricsAvailable() async {
+    try {
+      return await _localAuth.canCheckBiometrics && await _localAuth.isDeviceSupported();
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> canUseBiometrics() async {
     if (!await _store.biometricsEnabled()) return false;
     try {
