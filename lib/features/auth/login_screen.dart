@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/l10n/strings.dart';
+import '../../core/storage/secure_store.dart';
 import '../../core/theme/app_theme.dart';
 import 'auth_controller.dart';
 
@@ -18,6 +19,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _form = GlobalKey<FormState>();
   bool _busy = false;
   bool _obscure = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Remember me: the last username is filled in; the password never is.
+    ref.read(secureStoreProvider).readLastUsername().then((u) {
+      if (u != null && mounted && _user.text.isEmpty) _user.text = u;
+    });
+  }
 
   @override
   void dispose() {

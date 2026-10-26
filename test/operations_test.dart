@@ -59,4 +59,21 @@ void main() {
     expect(rows.first.value, '75 XAF');
     expect(blocks.last, isA<RichParagraph>());
   });
+
+  test('bold labels are rows, not headings; French entities decode', () {
+    final blocks = parseRichContent(
+        '<h3>Aper&ccedil;u du retrait</h3>'
+        '<p><b>Montant :</b> 5&nbsp;000 XAF<br><b>Frais:</b> 39 XAF</p>'
+        '<p>Num&eacute;ro MoMo: 677123456</p><p>Heure 12:30</p>');
+    expect((blocks.first as RichHeading).text, 'Aperçu du retrait');
+    final rows = blocks.whereType<RichRow>().toList();
+    expect(rows.map((r) => r.label), ['Montant', 'Frais', 'Numéro MoMo']);
+    expect(rows.first.value, '5 000 XAF');
+    expect(blocks.last, isA<RichParagraph>());
+  });
+
+  test('numeric entities decode', () {
+    expect(decodeHtmlEntities('a&#233;b&#x20AC;'), 'aéb€');
+    expect(decodeHtmlEntities('&unknown;'), '&unknown;');
+  });
 }

@@ -265,18 +265,44 @@ class OperationResult {
 String htmlToText(String html) {
   var s = html
       .replaceAll(RegExp(r'<\s*br\s*/?>', caseSensitive: false), '\n')
-      .replaceAll(RegExp(r'</\s*(p|div|tr|li|h\d)\s*>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'<\s*hr[^>]*>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'</\s*(p|div|tr|li|h\d|table|ul|ol)\s*>', caseSensitive: false), '\n')
       .replaceAll(RegExp(r'<\s*li[^>]*>', caseSensitive: false), '• ')
       .replaceAll(RegExp(r'</\s*td\s*>', caseSensitive: false), '   ')
       .replaceAll(RegExp(r'<[^>]+>'), '');
-  const entities = {
-    '&nbsp;': ' ',
-    '&amp;': '&',
-    '&lt;': '<',
-    '&gt;': '>',
-    '&quot;': '"',
-    '&#39;': "'",
-  };
-  entities.forEach((k, v) => s = s.replaceAll(k, v));
-  return s.replaceAll(RegExp(r'\n\s*\n\s*\n+'), '\n\n').trim();
+  s = decodeHtmlEntities(s);
+  return s
+      .split('\n')
+      .map((l) => l.replaceAll(RegExp(r'[ \t\u00a0]+'), ' ').trim())
+      .join('\n')
+      .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+      .trim();
 }
+
+const _namedEntities = {
+  'nbsp': '\u00a0', 'amp': '&', 'lt': '<', 'gt': '>', 'quot': '"', 'apos': "'",
+  'eacute': 'é', 'egrave': 'è', 'ecirc': 'ê', 'euml': 'ë', 'agrave': 'à',
+  'acirc': 'â', 'ccedil': 'ç', 'icirc': 'î', 'iuml': 'ï', 'ocirc': 'ô',
+  'ugrave': 'ù', 'ucirc': 'û', 'uuml': 'ü', 'Eacute': 'É', 'Egrave': 'È',
+  'Agrave': 'À', 'Ccedil': 'Ç', 'laquo': '«', 'raquo': '»', 'euro': '€',
+  'bull': '•', 'middot': '·', 'ndash': '–', 'mdash': '—', 'hellip': '…',
+  'rsquo': '’', 'lsquo': '‘', 'rdquo': '”', 'ldquo': '“', 'deg': '°',
+};
+
+/// Decodes named (French accents included) and numeric HTML entities.
+String decodeHtmlEntities(String s) => s.replaceAllMapped(
+      RegExp(r'&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z]+);'),
+      (m) {
+        final e = m.group(1)!;
+        int? code;
+        if (e.startsWith('#x') || e.startsWith('#X')) {
+          code = int.tryParse(e.substring(2), radix: 16);
+        } else if (e.startsWith('#')) {
+          code = int.tryParse(e.substring(1));
+        }
+        if (code != null && code > 0 && code <= 0x10FFFF) {
+          return String.fromCharCode(code);
+        }
+        return _namedEntities[e] ?? m.group(0)!;
+      },
+    );

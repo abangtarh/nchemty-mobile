@@ -334,7 +334,7 @@ class _OperationScreenState extends ConsumerState<OperationScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Column(children: [
                   for (final c in r.columns)
-                    if (row[c.$1] != null) SummaryRow(c.$2, '${row[c.$1]}'),
+                    if (_cell(row[c.$1]).isNotEmpty) SummaryRow(c.$2, _cell(row[c.$1])),
                 ]),
               ),
             ),
@@ -388,6 +388,14 @@ class _OperationScreenState extends ConsumerState<OperationScreen> {
     );
   }
 }
+
+/// A result-page cell: entity references show their name, not the raw map.
+String _cell(Object? v) => switch (v) {
+      null => '',
+      Map() => '${v['display'] ?? v['name'] ?? v['label'] ?? ''}',
+      List() => v.map(_cell).where((e) => e.isNotEmpty).join(', '),
+      _ => htmlToText('$v'),
+    };
 
 /// All custom operations the member can run (loans, savings, MoMo, …).
 final operationsListProvider = FutureProvider.autoDispose<List<OperationDef>>(

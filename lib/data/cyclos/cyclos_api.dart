@@ -23,23 +23,56 @@ class CyclosApi {
     }
   }
 
-  /// POST /auth/session with Basic auth. Returns the session token + user.
-  Future<({String token, CyclosUser user})> login(
-      String username, String password) {
+  /// POST /auth/session with Basic auth. Returns the session token + user,
+  /// plus `pinCreationToken` (valid 6 minutes) to create a device PIN.
+  Future<({String token, CyclosUser user, String? pinCreationToken})> login(
+          String username, String password) =>
+      _session(base64Encode(utf8.encode('$username:$password')));
+
+  /// Login with a Cyclos device PIN: `Principal-Type: #` and
+  /// `Basic base64(principal:salt+PIN)` (openapi securitySchemes.basic).
+  Future<({String token, CyclosUser user, String? pinCreationToken})> loginWithDevicePin(
+          String principal, String salt, String pin) =>
+      _session(base64Encode(utf8.encode('$principal:$salt$pin')), principalType: '#');
+
+  Future<({String token, CyclosUser user, String? pinCreationToken})> _session(
+      String basic, {String? principalType}) {
     return _guard(() async {
-      final basic = base64Encode(utf8.encode('$username:$password'));
       final res = await _dio.post<Map<String, dynamic>>(
         '/auth/session',
-        options: Options(headers: {'Authorization': 'Basic $basic'}),
+        options: Options(headers: {
+          'Authorization': 'Basic $basic',
+          if (principalType != null) 'Principal-Type': principalType,
+        }),
       );
       final data = res.data!;
       return (
         token: data['sessionToken'].toString(),
         user: CyclosUser.fromJson(
             (data['user'] as Map).cast<String, dynamic>()),
+        pinCreationToken: data['pinCreationToken']?.toString(),
       );
     });
   }
+
+  /// POST /device-pins: registers this phone's PIN with Cyclos. Confirmed
+  /// with the login's pinCreationToken (or the password after 6 minutes).
+  Future<({String principal, String salt})> createDevicePin({
+    required String name,
+    required String pin,
+    String? pinCreationToken,
+    String? currentPassword,
+  }) =>
+      _guard(() async {
+        final res = await _dio.post<Map<String, dynamic>>('/device-pins', data: {
+          'name': name,
+          'pin': pin,
+          if (pinCreationToken != null) 'pinCreationToken': pinCreationToken,
+          if (currentPassword != null) 'currentPassword': currentPassword,
+        });
+        final d = res.data!;
+        return (principal: d['principal'].toString(), salt: d['salt'].toString());
+      });
 
   /// GET /auth — validates the current token and returns the logged user.
   Future<CyclosUser> currentUser() => _guard(() async {

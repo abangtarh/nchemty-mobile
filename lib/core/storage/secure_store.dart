@@ -25,6 +25,11 @@ class SecureStore {
   static const _kBiometrics = 'biometrics_enabled';
   static const _kLocale = 'locale';
   static const _kAccount = 'selected_account';
+  static const _kPinPrincipal = 'device_pin_principal';
+  static const _kPinServerSalt = 'device_pin_salt';
+  static const _kBioPin = 'biometric_pin';
+  static const _kLastUser = 'last_username';
+  static const _kUserName = 'user_display';
 
   Future<String?> readSession() => _s.read(key: _kSession);
   Future<void> writeSession(String token) =>
@@ -46,6 +51,43 @@ class SecureStore {
     final hash = await _s.read(key: _kPinHash);
     if (salt == null || hash == null) return false;
     return _hash(pin, salt) == hash;
+  }
+
+  /// Cyclos device PIN (principal + salt returned by POST /device-pins).
+  Future<({String principal, String salt})?> readDevicePin() async {
+    final p = await _s.read(key: _kPinPrincipal);
+    final salt = await _s.read(key: _kPinServerSalt);
+    return p == null || salt == null ? null : (principal: p, salt: salt);
+  }
+
+  Future<void> writeDevicePin(String principal, String salt) async {
+    await _s.write(key: _kPinPrincipal, value: principal);
+    await _s.write(key: _kPinServerSalt, value: salt);
+  }
+
+  Future<void> clearDevicePin() async {
+    await _s.delete(key: _kPinPrincipal);
+    await _s.delete(key: _kPinServerSalt);
+    await _s.delete(key: _kBioPin);
+  }
+
+  /// Only kept when biometrics are on, so a fingerprint can open a new
+  /// Cyclos session after the old one expired (Keystore / Keychain).
+  Future<String?> readBioPin() => _s.read(key: _kBioPin);
+  Future<void> writeBioPin(String? pin) =>
+      pin == null ? _s.delete(key: _kBioPin) : _s.write(key: _kBioPin, value: pin);
+
+  /// "Remember me": last username and display name (not the password).
+  Future<String?> readLastUsername() => _s.read(key: _kLastUser);
+  Future<void> writeLastUsername(String u) => _s.write(key: _kLastUser, value: u);
+  Future<String?> readUserName() => _s.read(key: _kUserName);
+  Future<void> writeUserName(String n) => _s.write(key: _kUserName, value: n);
+
+  /// Removes the local PIN (e.g. after Cyclos removed the device PIN).
+  Future<void> clearPin() async {
+    await _s.delete(key: _kPinHash);
+    await _s.delete(key: _kPinSalt);
+    await clearDevicePin();
   }
 
   Future<bool> biometricsEnabled() async =>

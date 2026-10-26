@@ -113,9 +113,15 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
       return;
     }
     final auth = ref.read(authProvider.notifier);
-    final wantsBio = await _askBiometrics();
-    await auth.setBiometrics(wantsBio);
-    await auth.createPin(pin);
+    final wantsBio = await auth.biometricsAvailable() && await _askBiometrics();
+    final error = await auth.createPin(pin, biometrics: wantsBio);
+    if (error != null && mounted) {
+      // Cyclos refused the PIN (too simple, wrong length): choose another.
+      setState(() {
+        _first = null;
+        _error = error;
+      });
+    }
   }
 
   Future<bool> _askBiometrics() async {
