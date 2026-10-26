@@ -298,11 +298,18 @@ class _OperationScreenState extends ConsumerState<OperationScreen> {
     final isNotification = r.resultType == 'notification' || (r.content == null && r.notification != null);
     final failed = r.isError || r.notificationLevel == 'warning';
     final body = r.content ?? r.notification;
-    final blocks = body == null || body.isEmpty
+    var blocks = body == null || body.isEmpty
         ? const <RichBlock>[]
         : (r.resultType == 'plainText'
             ? [for (final l in body.split('\n')) if (l.trim().isNotEmpty) RichParagraph(l.trim())]
             : parseRichContent(body));
+    // Scripts often repeat their title as the first heading ("My loans").
+    if (blocks.isNotEmpty &&
+        blocks.first is RichHeading &&
+        (blocks.first as RichHeading).text.trim().toLowerCase() ==
+            (r.title ?? widget.args.title ?? '').trim().toLowerCase()) {
+      blocks = blocks.sublist(1);
+    }
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [

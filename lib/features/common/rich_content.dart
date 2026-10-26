@@ -26,71 +26,129 @@ class RichRow extends RichBlock {
   final String value;
 }
 
-final _rowRe = RegExp(r'<tr[^>]*>(.*?)</tr>', caseSensitive: false, dotAll: true);
-final _cellRe = RegExp(r'<t[dh][^>]*>(.*?)</t[dh]>', caseSensitive: false, dotAll: true);
-final _headingRe =
-    RegExp(r'<(h[1-6]|strong|b)[^>]*>(.*?)</\1>', caseSensitive: false, dotAll: true);
+/// A real table (3+ columns, or one with a header row).
+class RichTable extends RichBlock {
+  const RichTable(this.headers, this.rows);
+  final List<String> headers;
+  final List<List<String>> rows;
+}
+
+final _ci = (String p) => RegExp(p, caseSensitive: false, dotAll: true);
+final _rowRe = _ci(r'<tr\b[^>]*>(.*?)</tr\s*>');
+final _cellRe = _ci(r'<(t[dh])\b[^>]*>(.*?)</\1\s*>');
+final _tableRe = _ci(r'<table\b[^>]*>(.*?)</table\s*>');
 // "Label: value", "Label : value" (French spacing) or "Label:value"; the
 // label must contain a letter so times like "12:30" stay plain text.
 final _labelValueRe = RegExp(r'^([^:]{1,40}?)\s*:\s*(\S.*)$');
 final _hasLetter = RegExp(r'[A-Za-zÀ-ÿ]');
 
-/// Splits Cyclos rich text (HTML) into headings, paragraphs and
-/// label/value rows, so script results read like a receipt.
+// Markers that survive htmlToText (control characters, never in content).
+const _hMark = '\u0001'; // heading line
+const _bOpen = '\u0002'; // <b>/<strong> start
+const _bClose = '\u0003'; // <b>/<strong> end
+const _tMark = '\u0004'; // table placeholder
+const _sep = '\u001F'; // between side-by-side inline elements
+
+String _cellText(String html) => htmlToText(html).replaceAll('\n', ' ').trim();
+
+List<RichBlock> _parseTable(String inner) {
+  final hasHead = RegExp(r'<thead\b', caseSensitive: false).hasMatch(inner);
+  final rows = <List<String>>[];
+  var headers = <String>[];
+  var first = true;
+  for (final r in _rowRe.allMatches(inner)) {
+    final cells = _cellRe.allMatches(r.group(1) ?? '').toList();
+    if (cells.isEmpty) continue;
+    final texts = [for (final c in cells) _cellText(c.group(2) ?? '')];
+    final allTh = cells.every((c) => c.group(1)!.toLowerCase() == 'th');
+    if (first && (allTh || hasHead) && texts.length > 1) {
+      headers = texts;
+    } else if (texts.any((t) => t.isNotEmpty)) {
+      rows.add(texts);
+    }
+    first = false;
+  }
+  final cols = [headers.length, ...rows.map((r) => r.length)].fold<int>(0, (a, b) => a > b ? a : b);
+  if (cols <= 2 && headers.isEmpty) {
+    // Two cells per row: a receipt-style label/value list.
+    return [
+      for (final r in rows)
+        if (r.where((c) => c.isNotEmpty).length >= 2)
+          RichRow(r.first, r.skip(1).join(' '))
+        else
+          RichParagraph(r.firstWhere((c) => c.isNotEmpty)),
+    ];
+  }
+  return [RichTable(headers, rows)];
+}
+
+/// Splits Cyclos rich text (HTML) into headings, paragraphs, label/value
+/// rows and tables, so script results read like a receipt. Styles,
+/// scripts and comments are dropped.
 List<RichBlock> parseRichContent(String html) {
+  var s = html
+      .replaceAll(_ci(r'<!--.*?-->'), '')
+      .replaceAll(_ci(r'<(style|script|head|title)\b[^>]*>.*?</\1\s*>'), '');
+
+  final tables = <List<RichBlock>>[];
+  s = s.replaceAllMapped(_tableRe, (m) {
+    tables.add(_parseTable(m.group(1) ?? ''));
+    return '\n$_tMark${tables.length - 1}$_tMark\n';
+  });
+
+  // <span>Application ID</span><span>APP-1</span> -> two parts, not "IDAPP-1".
+  s = s.replaceAllMapped(
+      _ci(r'(</(?:span|b|strong|em|i|label|small|a|dt|dd|code)\s*>)\s*(?=<(?:span|b|strong|em|i|label|small|a|dt|dd|code)\b)'),
+      (m) => '${m.group(1)}$_sep');
+  s = s.replaceAllMapped(_ci(r'<h[1-6]\b[^>]*>(.*?)</h[1-6]\s*>'),
+      (m) => '\n$_hMark${m.group(1)}\n');
+  s = s.replaceAllMapped(_ci(r'<(b|strong)\b[^>]*>(.*?)</\1\s*>'),
+      (m) => '$_bOpen${m.group(2)}$_bClose');
+
   final out = <RichBlock>[];
+  final wholeBold = RegExp('^$_bOpen([^$_bOpen$_bClose]*)$_bClose\$');
+  for (final raw in htmlToText(s).split('\n')) {
+    var l = raw.trim();
+    if (l.isEmpty) continue;
 
-  void addText(String segment) {
-    // Headings first (whole-line <h*>, <strong>, <b>).
-    var rest = segment;
-    for (final m in _headingRe.allMatches(segment)) {
-      final before = segment.substring(0, m.start);
-      final onlyTagsBefore = htmlToText(before).isEmpty;
-      final h = htmlToText(m.group(2) ?? '');
-      // `<b>Amount:</b> 5 000 XAF` is a label/value line, not a heading:
-      // a heading ends with a line break (or nothing) after its tag.
-      final after = segment.substring(m.end);
-      final lineRest = htmlToText(after.split(RegExp(r'<\s*br|</\s*(p|div)|<\s*(p|div|table|h\d)\b|\n',
-              caseSensitive: false)).first);
-      final isHeading = onlyTagsBefore && h.isNotEmpty && !h.endsWith(':') && lineRest.isEmpty;
-      if (isHeading) {
-        out.add(RichHeading(h));
-        rest = after;
-      }
-      break;
+    final t = RegExp('$_tMark(\\d+)$_tMark').firstMatch(l);
+    if (t != null) {
+      out.addAll(tables[int.parse(t.group(1)!)]);
+      continue;
     }
-    for (final line in htmlToText(rest).split('\n')) {
-      final l = line.trim();
+    if (l.startsWith(_hMark)) {
+      final h = l.replaceAll(RegExp('[$_hMark$_bOpen$_bClose$_sep]'), ' ').trim();
+      if (h.isNotEmpty) out.add(RichHeading(h.replaceAll(RegExp(r'\s+'), ' ')));
+      continue;
+    }
+    final wb = wholeBold.firstMatch(l);
+    if (wb != null && !wb.group(1)!.trim().endsWith(':')) {
+      out.add(RichHeading(wb.group(1)!.trim()));
+      continue;
+    }
+    l = l.replaceAll(RegExp('[$_bOpen$_bClose]'), '');
+
+    if (l.contains(_sep)) {
+      final parts = l.split(_sep).map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
+      if (parts.length == 2 && parts.first.length <= 40) {
+        out.add(RichRow(parts.first.replaceAll(RegExp(r'\s*:$'), ''), parts.last));
+        continue;
+      }
+      l = parts.join(parts.length > 2 ? ' · ' : ' ');
       if (l.isEmpty) continue;
-      final lv = _labelValueRe.firstMatch(l);
-      if (lv != null &&
-          _hasLetter.hasMatch(lv.group(1)!) &&
-          !lv.group(2)!.startsWith('//') &&
-          // "12:30" is a time, not "label: value".
-          !(RegExp(r'\d$').hasMatch(lv.group(1)!) && RegExp(r'^\d').hasMatch(lv.group(2)!))) {
-        out.add(RichRow(lv.group(1)!.trim(), lv.group(2)!.trim()));
-      } else {
-        out.add(RichParagraph(l));
-      }
     }
-  }
 
-  var pos = 0;
-  for (final m in _rowRe.allMatches(html)) {
-    addText(html.substring(pos, m.start).replaceAll(RegExp(r'</?(table|tbody|thead)[^>]*>', caseSensitive: false), ''));
-    final cells = _cellRe
-        .allMatches(m.group(1) ?? '')
-        .map((c) => htmlToText(c.group(1) ?? '').replaceAll('\n', ' ').trim())
-        .where((c) => c.isNotEmpty)
-        .toList();
-    if (cells.length >= 2) {
-      out.add(RichRow(cells.first, cells.skip(1).join(' ')));
-    } else if (cells.length == 1) {
-      out.add(RichParagraph(cells.first));
+    final lv = _labelValueRe.firstMatch(l);
+    if (lv != null &&
+        _hasLetter.hasMatch(lv.group(1)!) &&
+        !lv.group(2)!.startsWith('//') &&
+        // "12:30" is a time, not "label: value".
+        !(RegExp(r'\d$').hasMatch(lv.group(1)!) && RegExp(r'^\d').hasMatch(lv.group(2)!))) {
+      out.add(RichRow(lv.group(1)!.trim(), lv.group(2)!.trim()));
+    } else {
+      out.add(RichParagraph(l));
     }
-    pos = m.end;
   }
-  addText(html.substring(pos).replaceAll(RegExp(r'</?(table|tbody|thead)[^>]*>', caseSensitive: false), ''));
   return out;
 }
 
@@ -127,6 +185,10 @@ class RichContentView extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(text, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           ));
+        case RichTable():
+          flushRows();
+          children.add(_TableCard(table: b));
+          children.add(const SizedBox(height: 12));
         case RichParagraph(:final text):
           flushRows();
           children.add(Padding(
@@ -137,5 +199,45 @@ class RichContentView extends StatelessWidget {
     }
     flushRows();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
+  }
+}
+
+/// Wide tables scroll sideways inside a card instead of squashing columns.
+class _TableCard extends StatelessWidget {
+  const _TableCard({required this.table});
+  final RichTable table;
+
+  @override
+  Widget build(BuildContext context) {
+    final cols = [table.headers.length, ...table.rows.map((r) => r.length)]
+        .fold<int>(0, (a, b) => a > b ? a : b);
+    List<String> pad(List<String> r) => [...r, for (var i = r.length; i < cols; i++) ''];
+    final headers = table.headers.isEmpty ? List.filled(cols, '') : pad(table.headers);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          headingRowHeight: table.headers.isEmpty ? 0 : 44,
+          dataRowMinHeight: 40,
+          dataRowMaxHeight: double.infinity,
+          columnSpacing: 20,
+          horizontalMargin: 16,
+          headingTextStyle: const TextStyle(
+              fontWeight: FontWeight.w700, color: AppColors.muted, fontSize: 13),
+          columns: [for (final h in headers) DataColumn(label: Text(h))],
+          rows: [
+            for (final r in table.rows)
+              DataRow(cells: [
+                for (final c in pad(r))
+                  DataCell(ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 220),
+                    child: Text(c),
+                  )),
+              ]),
+          ],
+        ),
+      ),
+    );
   }
 }

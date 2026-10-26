@@ -76,4 +76,22 @@ void main() {
     expect(decodeHtmlEntities('a&#233;b&#x20AC;'), 'aéb€');
     expect(decodeHtmlEntities('&unknown;'), '&unknown;');
   });
+
+  test('styles are dropped, wide tables stay tables, side-by-side spans split', () {
+    final blocks = parseRichContent(
+        '<style>.empty { text-align: center; }</style>'
+        '<h4>1. Currencies</h4>'
+        '<table><tr><th>ID</th><th>Internal Name</th><th>Symbol</th></tr>'
+        '<tr><td>1</td><td>unit</td><td>XAF</td></tr></table>'
+        '<div><span class="k">Application ID</span><span>APP-17</span></div>'
+        '<div><span>Submitted On</span> <span>23/06/2026</span></div>');
+    expect(blocks.whereType<RichParagraph>().any((p) => p.text.contains('text-align')), isFalse);
+    expect((blocks.first as RichHeading).text, '1. Currencies');
+    final t = blocks.whereType<RichTable>().single;
+    expect(t.headers, ['ID', 'Internal Name', 'Symbol']);
+    expect(t.rows.single, ['1', 'unit', 'XAF']);
+    final rows = blocks.whereType<RichRow>().toList();
+    expect(rows.map((r) => '${r.label}=${r.value}'),
+        ['Application ID=APP-17', 'Submitted On=23/06/2026']);
+  });
 }
