@@ -62,11 +62,13 @@ class Env {
   /// Legal pages linked from sign-in and the menu (store requirement).
   /// Override with --dart-define=TERMS_URL=... etc. if the addresses differ.
   static const termsUrl =
-      String.fromEnvironment('TERMS_URL', defaultValue: 'https://nchemty.com/terms');
+      String.fromEnvironment('TERMS_URL', defaultValue: 'https://www.nchemty.com/legal/terms');
   static const privacyUrl =
-      String.fromEnvironment('PRIVACY_URL', defaultValue: 'https://nchemty.com/privacy');
+      String.fromEnvironment('PRIVACY_URL', defaultValue: 'https://www.nchemty.com/legal/privacy');
+  static const confidentialityUrl = String.fromEnvironment('CONFIDENTIALITY_URL',
+      defaultValue: 'https://www.nchemty.com/p/confidentiality');
   static const accountClosureUrl = String.fromEnvironment('ACCOUNT_CLOSURE_URL',
-      defaultValue: 'https://nchemty.com/account-closure');
+      defaultValue: 'https://www.nchemty.com/p/account-closure');
 
   static const idleLockAfter = Duration(minutes: 5);
   static const backgroundLockAfter = Duration(seconds: 60);

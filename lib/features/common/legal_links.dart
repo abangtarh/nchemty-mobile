@@ -54,6 +54,7 @@ class LegalFooter extends ConsumerWidget {
           alignment: WrapAlignment.center,
           children: [
             link(s.t('termsLink'), Env.termsUrl),
+            link(s.t('confidentialityLink'), Env.confidentialityUrl),
             link(s.t('privacyLink'), Env.privacyUrl),
             link(s.t('closeAccountLink'), Env.accountClosureUrl),
           ],
