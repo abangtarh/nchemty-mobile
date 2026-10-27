@@ -40,13 +40,19 @@ class S {
     'txPin': {'en': 'Transaction PIN', 'fr': 'Code de transaction'},
     'done': {'en': 'Done', 'fr': 'Terminé'},
     'success': {'en': 'Payment sent', 'fr': 'Paiement effectué'},
-    'momoNumber': {'en': 'MoMo number', 'fr': 'Numéro MoMo'},
-    'youReceive': {'en': 'You receive on MoMo', 'fr': 'Vous recevez sur MoMo'},
     'approvePrompt': {'en': 'Approve the MTN prompt on your phone', 'fr': 'Validez la demande MTN sur votre téléphone'},
     'loansSavings': {'en': 'Loans and savings', 'fr': 'Prêts et épargne'},
     'verifyId': {'en': 'Verify your identity', 'fr': 'Vérifiez votre identité'},
     'logout': {'en': 'Sign out', 'fr': 'Se déconnecter'},
     'retry': {'en': 'Try again', 'fr': 'Réessayer'},
+    'legalConsent': {
+      'en': 'By signing in, you accept the terms and confidentiality agreement and the privacy policy.',
+      'fr': 'En vous connectant, vous acceptez les conditions et l\'accord de confidentialité ainsi que la politique de confidentialité.',
+    },
+    'termsLink': {'en': 'Terms & confidentiality', 'fr': 'Conditions et confidentialité'},
+    'privacyLink': {'en': 'Privacy policy', 'fr': 'Politique de confidentialité'},
+    'closeAccountLink': {'en': 'Close my account', 'fr': 'Clôturer mon compte'},
+    'legalMenu': {'en': 'Terms & privacy', 'fr': 'Conditions et confidentialité'},
   };
 
   String t(String key) => _t[key]?[lang] ?? _t[key]?['en'] ?? key;

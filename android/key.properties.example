@@ -1,0 +1,6 @@
+# Copy to android/key.properties (ignored by git) and fill in.
+# Use forward slashes in the path on Windows.
+storeFile=C:/Users/atarh/keys/nchmty_2025V1.jks
+storePassword=CHANGE_ME
+keyAlias=CHANGE_ME
+keyPassword=CHANGE_ME

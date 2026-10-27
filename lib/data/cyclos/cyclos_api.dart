@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,23 +23,56 @@ class CyclosApi {
     }
   }
 
-  /// POST /auth/session with Basic auth. Returns the session token + user.
-  Future<({String token, CyclosUser user})> login(
-      String username, String password) {
+  /// POST /auth/session with Basic auth. Returns the session token + user,
+  /// plus `pinCreationToken` (valid 6 minutes) to create a device PIN.
+  Future<({String token, CyclosUser user, String? pinCreationToken})> login(
+          String username, String password) =>
+      _session(base64Encode(utf8.encode('$username:$password')));
+
+  /// Login with a Cyclos device PIN: `Principal-Type: #` and
+  /// `Basic base64(principal:salt+PIN)` (openapi securitySchemes.basic).
+  Future<({String token, CyclosUser user, String? pinCreationToken})> loginWithDevicePin(
+          String principal, String salt, String pin) =>
+      _session(base64Encode(utf8.encode('$principal:$salt$pin')), principalType: '#');
+
+  Future<({String token, CyclosUser user, String? pinCreationToken})> _session(
+      String basic, {String? principalType}) {
     return _guard(() async {
-      final basic = base64Encode(utf8.encode('$username:$password'));
       final res = await _dio.post<Map<String, dynamic>>(
         '/auth/session',
-        options: Options(headers: {'Authorization': 'Basic $basic'}),
+        options: Options(headers: {
+          'Authorization': 'Basic $basic',
+          if (principalType != null) 'Principal-Type': principalType,
+        }),
       );
       final data = res.data!;
       return (
         token: data['sessionToken'].toString(),
         user: CyclosUser.fromJson(
             (data['user'] as Map).cast<String, dynamic>()),
+        pinCreationToken: data['pinCreationToken']?.toString(),
       );
     });
   }
+
+  /// POST /device-pins: registers this phone's PIN with Cyclos. Confirmed
+  /// with the login's pinCreationToken (or the password after 6 minutes).
+  Future<({String principal, String salt})> createDevicePin({
+    required String name,
+    required String pin,
+    String? pinCreationToken,
+    String? currentPassword,
+  }) =>
+      _guard(() async {
+        final res = await _dio.post<Map<String, dynamic>>('/device-pins', data: {
+          'name': name,
+          'pin': pin,
+          if (pinCreationToken != null) 'pinCreationToken': pinCreationToken,
+          if (currentPassword != null) 'currentPassword': currentPassword,
+        });
+        final d = res.data!;
+        return (principal: d['principal'].toString(), salt: d['salt'].toString());
+      });
 
   /// GET /auth — validates the current token and returns the logged user.
   Future<CyclosUser> currentUser() => _guard(() async {
@@ -158,6 +192,35 @@ class CyclosApi {
           }),
         );
         return (res.data?['transactionNumber'] ?? res.data?['id']).toString();
+      });
+
+  /// GET /transfers/{key} — details of one history entry.
+  /// If [key] is a payment's transaction number rather than a transfer's,
+  /// falls back to GET /transactions/{key} and opens its generated transfer.
+  Future<TransferDetails> transfer(String key) => _guard(() async {
+        try {
+          final res = await _dio.get<Map<String, dynamic>>(
+              '/transfers/${Uri.encodeComponent(key)}');
+          return TransferDetails.fromJson(res.data!);
+        } on DioException catch (e) {
+          if (e.response?.statusCode != 404) rethrow;
+          final tx = await _dio.get<Map<String, dynamic>>(
+              '/transactions/${Uri.encodeComponent(key)}');
+          final transferId = (tx.data?['transfer'] as Map?)?['id'];
+          if (transferId == null) rethrow;
+          final res = await _dio.get<Map<String, dynamic>>('/transfers/$transferId');
+          return TransferDetails.fromJson(res.data!);
+        }
+      });
+
+  /// GET /transfers/{key}/export/{format} — the official Cyclos file
+  /// (e.g. PDF receipt) for one transfer.
+  Future<Uint8List> exportTransfer(String key, String format) => _guard(() async {
+        final res = await _dio.get<List<int>>(
+          '/transfers/${Uri.encodeComponent(key)}/export/${Uri.encodeComponent(format)}',
+          options: Options(responseType: ResponseType.bytes, headers: {'Accept': '*/*'}),
+        );
+        return Uint8List.fromList(res.data ?? const []);
       });
 
   /// POST /auth/otp?medium=sms — sends a one-time code when the

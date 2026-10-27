@@ -7,15 +7,22 @@ Developer: Abang (Sure Engineering & Technologies). Develops on Windows 11
 ## Architecture (decided: hybrid)
 - **Cyclos REST directly** (`lib/data/cyclos/`): login (`POST /auth/session`,
   `Session-Token` header, `Channel: mobile`), accounts, history, member payments
-  (preview → `POST /self/payments` with `Confirmation-Password` header), and
+  (preview → `POST /self/payments` with `confirmationPassword` header), and
   **native Cyclos QR** via the Tickets API (`cyclos_qr_api.dart`).
+- **MoMo top-up / cash-out**: Cyclos custom operations run by the app
+  (`cyclos_operations_api.dart`, `operation_screen.dart`). The old hub MoMo
+  screens were removed.
+- **Verify ID**: opens Nchemty's web KYC wizard (`--dart-define=KYC_URL=...`)
+  in the in-app browser (`features/kyc/kyc_launcher.dart`). No hub involved.
+- **Receipt verification**: public Cyclos custom web service
+  `/run/verify-receipt` (`docs/cyclos/`).
 - **Node middleware / Payment Hub `/v1`** (`lib/data/middleware/hub_api.dart`):
-  MTN MoMo top-up/cash-out, loans (LoanCoreLib), ACAO DailySaver (ACAOCoreLib),
-  KYC. Contract in `docs/middleware-contract.md`. These routes are NOT built yet,
-  so those screens error at runtime until the hub exists.
+  only loans (LoanCoreLib) and ACAO DailySaver (ACAOCoreLib) remain, behind
+  `HUB_ENABLED`. Contract in `docs/middleware-contract.md` (its MoMo and KYC
+  sections are no longer used by the app).
 - Cyclos is the single source of truth for balances; the app never computes them.
 - Stack: Riverpod 2.x, go_router 14, dio 5, flutter_secure_storage, local_auth,
-  image_picker, mobile_scanner. EN/FR strings in `lib/core/l10n/strings.dart`.
+  url_launcher, mobile_scanner, pdf, printing. EN/FR strings in `lib/core/l10n/strings.dart`.
 
 ## Confirmed from the instance's openapi.json (Nchemty API 4.16.17)
 - Confirmation credential goes in the header **`confirmationPassword`** (not
@@ -61,7 +68,7 @@ Learned so far:
   version 1.0, published under Sure Engineering. App ID: `com.nchemty.ebank` on
   both stores (verify against App Store Connect / Play Console before release).
 - pubspec version 1.1.0+2; Android versionCode must exceed the live one (unknown).
-- MoMo cash-out fee rules live in the hub: 35 XAF flat under 5 000 XAF; from
+- MoMo cash-out fee rules live in the Cyclos operation scripts (formerly hub): 35 XAF flat under 5 000 XAF; from
   5 000 XAF, ceiling(0.7% + 4), min 39 XAF.
 
 ## Local setup status (Windows)

@@ -2,15 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'data/cyclos/cyclos_qr_api.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/pin_screen.dart';
 import 'features/history/history_screen.dart';
+import 'features/history/transfer_details_screen.dart';
 import 'features/home/home_screen.dart';
-import 'features/kyc/kyc_screen.dart';
 import 'features/loans/products_screen.dart';
-import 'features/momo/momo_screens.dart';
+import 'features/operations/operation_screen.dart';
 import 'features/qr/qr_screens.dart';
+import 'features/receipts/verify_receipt_screen.dart';
 import 'features/transfer/transfer_screen.dart';
 
 /// Every route outside /auth requires an unlocked session; the redirect
@@ -52,12 +54,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/transfer',
         builder: (_, s) => TransferScreen(args: s.extra as TransferArgs?),
       ),
-      GoRoute(path: '/momo/topup', builder: (_, __) => const TopupScreen()),
-      GoRoute(path: '/momo/cashout', builder: (_, __) => const CashoutScreen()),
       GoRoute(path: '/products', builder: (_, __) => const ProductsScreen()),
-      GoRoute(path: '/kyc', builder: (_, __) => const KycScreen()),
+      GoRoute(
+        path: '/transfer-details/:key',
+        builder: (_, s) => TransferDetailsScreen(transferKey: s.pathParameters['key']!),
+      ),
+      GoRoute(
+        path: '/op',
+        builder: (_, s) => OperationScreen(args: s.extra! as OperationArgs),
+      ),
+      GoRoute(path: '/services', builder: (_, __) => const ServicesScreen()),
       GoRoute(path: '/qr/scan', builder: (_, __) => const ScanToPayScreen()),
       GoRoute(path: '/qr/receive', builder: (_, __) => const ReceiveQrScreen()),
+      GoRoute(
+        path: '/verify',
+        builder: (_, s) => VerifyReceiptScreen(scanned: s.extra as ReceiptQr?),
+      ),
     ],
   );
 });

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/network/api_exception.dart';
@@ -51,6 +52,7 @@ class HistoryTile extends StatelessWidget {
     final when = DateFormat('d MMM, HH:mm').format(entry.date);
     return ListTile(
       contentPadding: EdgeInsets.zero,
+      onTap: () => context.push('/transfer-details/${Uri.encodeComponent(entry.key)}'),
       title: Text(entry.title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -83,13 +85,19 @@ class SummaryRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: TextStyle(
-                  color: strong ? AppColors.ink : AppColors.muted,
-                  fontWeight: strong ? FontWeight.w700 : FontWeight.w400)),
-          Flexible(
+          // Both sides wrap, so long French labels or values never overflow.
+          Expanded(
+            flex: 5,
+            child: Text(label,
+                style: TextStyle(
+                    color: strong ? AppColors.ink : AppColors.muted,
+                    fontWeight: strong ? FontWeight.w700 : FontWeight.w400)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 6,
             child: Text(value,
                 textAlign: TextAlign.end,
                 style: TextStyle(
