@@ -2,7 +2,7 @@ name: nchemty_mobile
 description: Nchemty Credit Union mobile banking app (iOS + Android) on Cyclos 4.16.17.
 publish_to: "none"
 # Must be above the live App Store version (1.0) to ship as an update.
-version: 1.1.0+2
+version: 2.16.0+300000
 
 environment:
   sdk: ">=3.7.0 <4.0.0"

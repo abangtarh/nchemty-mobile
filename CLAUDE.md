@@ -67,7 +67,12 @@ Learned so far:
 - Store listing: existing app "Nchemty", Apple ID 6757865496, SKU 015012026, live
   version 1.0, published under Sure Engineering. App ID: `com.nchemty.ebank` on
   both stores (verify against App Store Connect / Play Console before release).
-- pubspec version 1.1.0+2; Android versionCode must exceed the live one (unknown).
+- Store identity CONFIRMED (Play Console + App Store Connect): `com.nchemty.ebank`
+  on both stores. Live: Play release "1.0"; App Store version 1.0 whose build
+  carries CFBundleShortVersionString 2.15.1 (build 1, old Cyclos Mobile).
+- pubspec version 2.16.0+300000: 2.16.0 so iOS is above the uploaded 2.15.1;
+  build number 300000 so the Android versionCode is above the old Cordova one.
+  Raise the +build number on every store upload.
 - MoMo cash-out fee rules live in the Cyclos operation scripts (formerly hub): 35 XAF flat under 5 000 XAF; from
   5 000 XAF, ceiling(0.7% + 4), min 39 XAF.
 
