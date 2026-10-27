@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/storage/secure_store.dart';
 import '../../core/theme/app_theme.dart';
+import '../common/legal_links.dart';
 import 'auth_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -129,6 +130,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 24),
+            const LegalFooter(),
           ],
         ),
       ),

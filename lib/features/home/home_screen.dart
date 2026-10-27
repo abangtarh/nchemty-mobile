@@ -10,6 +10,7 @@ import '../../core/utils/money.dart';
 import '../../data/cyclos/cyclos_operations_api.dart';
 import '../../data/models/models.dart';
 import '../auth/auth_controller.dart';
+import '../common/legal_links.dart';
 import '../common/widgets.dart';
 import '../kyc/kyc_launcher.dart';
 import '../operations/operation_screen.dart';
@@ -51,6 +52,9 @@ class HomeScreen extends ConsumerWidget {
                       if (v == 'kyc') openKycWizard(context, s.t('verifyId'));
                       if (v == 'services') context.push('/services');
                       if (v == 'verify') context.push('/verify');
+                      if (v == 'terms') openLegalPage(context, Env.termsUrl);
+                      if (v == 'privacy') openLegalPage(context, Env.privacyUrl);
+                      if (v == 'close') openLegalPage(context, Env.accountClosureUrl);
                       if (v == 'products') {
                         _hub(context, '/products', 'Loans and savings');
                       }
@@ -68,6 +72,9 @@ class HomeScreen extends ConsumerWidget {
                       PopupMenuItem(value: 'products', child: Text(s.t('loansSavings'))),
                       PopupMenuItem(value: 'kyc', child: Text(s.t('verifyId'))),
                       const PopupMenuItem(value: 'lang', child: Text('English / Français')),
+                      PopupMenuItem(value: 'terms', child: Text(s.t('termsLink'))),
+                      PopupMenuItem(value: 'privacy', child: Text(s.t('privacyLink'))),
+                      PopupMenuItem(value: 'close', child: Text(s.t('closeAccountLink'))),
                       PopupMenuItem(value: 'logout', child: Text(s.t('logout'))),
                     ],
                   ),

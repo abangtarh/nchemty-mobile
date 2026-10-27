@@ -45,6 +45,14 @@ class S {
     'verifyId': {'en': 'Verify your identity', 'fr': 'Vérifiez votre identité'},
     'logout': {'en': 'Sign out', 'fr': 'Se déconnecter'},
     'retry': {'en': 'Try again', 'fr': 'Réessayer'},
+    'legalConsent': {
+      'en': 'By signing in, you accept the terms and confidentiality agreement and the privacy policy.',
+      'fr': 'En vous connectant, vous acceptez les conditions et l\'accord de confidentialité ainsi que la politique de confidentialité.',
+    },
+    'termsLink': {'en': 'Terms & confidentiality', 'fr': 'Conditions et confidentialité'},
+    'privacyLink': {'en': 'Privacy policy', 'fr': 'Politique de confidentialité'},
+    'closeAccountLink': {'en': 'Close my account', 'fr': 'Clôturer mon compte'},
+    'legalMenu': {'en': 'Terms & privacy', 'fr': 'Conditions et confidentialité'},
   };
 
   String t(String key) => _t[key]?[lang] ?? _t[key]?['en'] ?? key;

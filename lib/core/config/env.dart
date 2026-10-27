@@ -59,6 +59,15 @@ class Env {
   /// not available yet. Set with --dart-define=KYC_URL=https://...
   static const kycUrl = String.fromEnvironment('KYC_URL');
 
+  /// Legal pages linked from sign-in and the menu (store requirement).
+  /// Override with --dart-define=TERMS_URL=... etc. if the addresses differ.
+  static const termsUrl =
+      String.fromEnvironment('TERMS_URL', defaultValue: 'https://nchemty.com/terms');
+  static const privacyUrl =
+      String.fromEnvironment('PRIVACY_URL', defaultValue: 'https://nchemty.com/privacy');
+  static const accountClosureUrl = String.fromEnvironment('ACCOUNT_CLOSURE_URL',
+      defaultValue: 'https://nchemty.com/account-closure');
+
   static const idleLockAfter = Duration(minutes: 5);
   static const backgroundLockAfter = Duration(seconds: 60);
 
