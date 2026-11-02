@@ -30,6 +30,7 @@ class SecureStore {
   static const _kBioPin = 'biometric_pin';
   static const _kLastUser = 'last_username';
   static const _kUserName = 'user_display';
+  static const _kDevicePinRefused = 'device_pin_refused';
 
   Future<String?> readSession() => _s.read(key: _kSession);
   Future<void> writeSession(String token) =>
@@ -83,10 +84,18 @@ class SecureStore {
   Future<String?> readUserName() => _s.read(key: _kUserName);
   Future<void> writeUserName(String n) => _s.write(key: _kUserName, value: n);
 
+  /// Why Cyclos refused to register the device PIN (e.g. not enabled on the
+  /// channel). Set: keep the local PIN and don't ask the member again.
+  Future<String?> readDevicePinRefused() => _s.read(key: _kDevicePinRefused);
+  Future<void> writeDevicePinRefused(String? reason) => reason == null
+      ? _s.delete(key: _kDevicePinRefused)
+      : _s.write(key: _kDevicePinRefused, value: reason);
+
   /// Removes the local PIN (e.g. after Cyclos removed the device PIN).
   Future<void> clearPin() async {
     await _s.delete(key: _kPinHash);
     await _s.delete(key: _kPinSalt);
+    await _s.delete(key: _kDevicePinRefused); // next PIN setup retries Cyclos
     await clearDevicePin();
   }
 

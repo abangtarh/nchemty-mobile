@@ -73,7 +73,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
               ),
               const SizedBox(height: 16),
               TextButton(
-                onPressed: auth.logout,
+                onPressed: auth.usePassword,
                 style: TextButton.styleFrom(foregroundColor: AppColors.goldLight),
                 child: Text(s.t('usePassword')),
               ),
@@ -114,14 +114,32 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
     }
     final auth = ref.read(authProvider.notifier);
     final wantsBio = await auth.biometricsAvailable() && await _askBiometrics();
-    final error = await auth.createPin(pin, biometrics: wantsBio);
-    if (error != null && mounted) {
+    final r = await auth.createPin(pin, biometrics: wantsBio);
+    if (!mounted) return;
+    if (r.rejected != null) {
       // Cyclos refused the PIN (too simple, wrong length): choose another.
       setState(() {
         _first = null;
-        _error = error;
+        _error = r.rejected;
       });
+      return;
     }
+    if (r.warning != null) {
+      await showDialog<void>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('PIN saved on this phone only'),
+          content: Text(
+              'Nchemty could not register your PIN for quick sign-in, so you '
+              'will need your password again when your session expires.\n\n'
+              'Server message: ${r.warning}'),
+          actions: [
+            FilledButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
+          ],
+        ),
+      );
+    }
+    auth.finishPinSetup();
   }
 
   Future<bool> _askBiometrics() async {

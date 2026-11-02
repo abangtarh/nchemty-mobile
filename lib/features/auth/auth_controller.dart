@@ -87,10 +87,13 @@ class AuthController extends Notifier<AuthState> {
       await _store.writeLastUsername(username.trim());
       await _store.writeUserName(result.user.display);
       _failedPins = 0;
+      // Keep an existing PIN. Only an install from before device PINs (local
+      // PIN, never tried with Cyclos) is asked to set it once more, so it
+      // can be registered. If Cyclos refused before, don't ask again.
       final hasPin = await _store.hasPin();
-      if (hasPin && await _store.readDevicePin() == null) {
-        // Older install (local PIN only): ask for a PIN again so it can be
-        // registered with Cyclos.
+      if (hasPin &&
+          await _store.readDevicePin() == null &&
+          await _store.readDevicePinRefused() == null) {
         await _store.clearPin();
       }
       _pinCreationToken = result.pinCreationToken;
@@ -107,10 +110,15 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
-  /// Registers the PIN with Cyclos and locally. Returns an error message
-  /// when Cyclos rejects the PIN (too simple, wrong length) so the member
-  /// can choose another; null on success.
-  Future<String?> createPin(String pin, {required bool biometrics}) async {
+  /// Registers the PIN with Cyclos and locally.
+  /// * `rejected`: Cyclos refused this PIN value (too simple, wrong length);
+  ///   nothing is saved, the member picks another.
+  /// * `warning`: the PIN works on this phone but Cyclos would not register
+  ///   it (device PINs off for the channel...). Saved; the screen shows the
+  ///   reason, then calls [finishPinSetup].
+  Future<({String? rejected, String? warning})> createPin(String pin,
+      {required bool biometrics}) async {
+    String? warning;
     Future<({String principal, String salt})> register({required bool withToken}) =>
         _api.createDevicePin(
           name: 'Nchemty app',
@@ -128,21 +136,35 @@ class AuthController extends Notifier<AuthState> {
         created = await register(withToken: false);
       }
       await _store.writeDevicePin(created.principal, created.salt);
+      await _store.writeDevicePinRefused(null);
     } on ApiException catch (e) {
       // PIN rules (too simple, wrong length): keep the token and password
       // in memory so the member's next choice can still be registered.
-      if (e.statusCode == 422) return e.message;
+      if (e.statusCode == 422) return (rejected: e.message, warning: null);
       // Device PINs not enabled for this channel (or offline): keep a
-      // local PIN; unlocking then works while the session lasts.
+      // local PIN; unlocking then works while the Cyclos session lasts.
       await _store.clearDevicePin();
+      final reason = '${e.message}${e.code != null ? ' (${e.code})' : ''}';
+      await _store.writeDevicePinRefused(reason);
+      warning = reason;
     }
     _pinCreationToken = null;
     _password = null;
     await _store.setPin(pin);
     await _store.setBiometrics(biometrics);
     await _store.writeBioPin(biometrics ? pin : null);
-    state = state.copyWith(status: AuthStatus.authenticated);
-    return null;
+    if (warning == null) finishPinSetup();
+    return (rejected: null, warning: warning);
+  }
+
+  void finishPinSetup() => state = state.copyWith(status: AuthStatus.authenticated);
+
+  /// "Use password" on the unlock screen: sign in with the password this
+  /// time, but keep the PIN and fingerprint set up on this phone.
+  Future<void> usePassword() async {
+    _session.token = null;
+    await _store.clearSession();
+    state = AuthState(AuthStatus.loggedOut, user: state.user);
   }
 
   Future<bool> unlockWithPin(String pin) async {
@@ -241,7 +263,8 @@ class AuthController extends Notifier<AuthState> {
         state = AuthState(AuthStatus.loggedOut,
             error: e.code == 'devicePinRemoved'
                 ? 'Your PIN was removed after too many attempts. Sign in with your password.'
-                : 'Please sign in with your password to set up your PIN again.');
+                : 'Please sign in with your password to set up your PIN again. '
+                    '(Cyclos: ${e.message}${e.code != null ? ', ${e.code}' : ''})');
       } else {
         state = state.copyWith(error: e.message);
       }
