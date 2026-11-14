@@ -14,6 +14,7 @@ import 'features/loans/products_screen.dart';
 import 'features/operations/operation_screen.dart';
 import 'features/qr/qr_screens.dart';
 import 'features/receipts/verify_receipt_screen.dart';
+import 'features/statements/statement_screen.dart';
 import 'features/transfer/transfer_screen.dart';
 
 /// Every route outside /auth requires an unlocked session; the redirect
@@ -68,6 +69,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/qr/scan', builder: (_, __) => const ScanToPayScreen()),
       GoRoute(path: '/qr/receive', builder: (_, __) => const ReceiveQrScreen()),
       GoRoute(path: '/agents', builder: (_, __) => const FindAgentScreen()),
+      GoRoute(
+        path: '/statement',
+        builder: (_, s) => StatementScreen(accountType: s.uri.queryParameters['account']),
+      ),
       GoRoute(
         path: '/verify',
         builder: (_, s) => VerifyReceiptScreen(scanned: s.extra as ReceiptQr?),

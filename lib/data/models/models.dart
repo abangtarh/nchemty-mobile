@@ -211,6 +211,46 @@ class TransferDetails {
   }
 }
 
+/// Account status over a period (Cyclos AccountWithHistoryStatus).
+class AccountPeriodStatus {
+  AccountPeriodStatus({
+    required this.typeName,
+    this.number,
+    this.balanceAtBegin,
+    this.balanceAtEnd,
+    this.incomingCount,
+    this.incomingSum,
+    this.outgoingCount,
+    this.outgoingSum,
+  });
+
+  final String typeName;
+  final String? number;
+  final num? balanceAtBegin;
+  final num? balanceAtEnd;
+  final int? incomingCount;
+  final num? incomingSum;
+  final int? outgoingCount;
+  final num? outgoingSum;
+
+  factory AccountPeriodStatus.fromJson(Map<String, dynamic> j) {
+    num? n(Object? v) => v == null ? null : num.tryParse('$v');
+    final st = (j['status'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final inc = (st['incoming'] as Map?)?.cast<String, dynamic>();
+    final out = (st['outgoing'] as Map?)?.cast<String, dynamic>();
+    return AccountPeriodStatus(
+      typeName: '${(j['type'] as Map?)?['name'] ?? 'Account'}',
+      number: j['number'] as String?,
+      balanceAtBegin: n(st['balanceAtBegin']),
+      balanceAtEnd: n(st['balanceAtEnd'] ?? st['balance']),
+      incomingCount: n(inc?['count'])?.toInt(),
+      incomingSum: n(inc?['sum']),
+      outgoingCount: n(out?['count'])?.toInt(),
+      outgoingSum: n(out?['sum'])?.abs(),
+    );
+  }
+}
+
 class HistoryPage {
   HistoryPage(this.items, {required this.hasNext});
   final List<HistoryEntry> items;

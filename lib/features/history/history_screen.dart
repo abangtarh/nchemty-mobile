@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/l10n/strings.dart';
 import '../../core/network/api_exception.dart';
@@ -73,7 +74,17 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   Widget build(BuildContext context) {
     final s = S.of(ref);
     return Scaffold(
-      appBar: AppBar(title: Text(s.t('history'))),
+      appBar: AppBar(
+        title: Text(s.t('history')),
+        actions: [
+          IconButton(
+            tooltip: s.t('statement'),
+            icon: const Icon(Icons.description_outlined),
+            onPressed: () => context.push(
+                '/statement?account=${Uri.encodeComponent(widget.accountType)}'),
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: () => _load(reset: true),
         child: ListView.builder(

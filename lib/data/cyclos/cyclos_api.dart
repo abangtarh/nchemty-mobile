@@ -223,6 +223,67 @@ class CyclosApi {
         return Uint8List.fromList(res.data ?? const []);
       });
 
+  static String? _period(DateTime? from, DateTime? to) => from == null && to == null
+      ? null
+      : [from?.toUtc().toIso8601String() ?? '', to?.toUtc().toIso8601String() ?? ''].join(',');
+
+  /// GET /self/accounts/{type}?datePeriod= — balance at the start and end
+  /// of the period, money in / out (AccountWithHistoryStatus).
+  Future<AccountPeriodStatus> accountPeriod(String accountType, DateTime from, DateTime to) =>
+      _guard(() async {
+        final res = await _dio.get<Map<String, dynamic>>(
+          '/self/accounts/$accountType',
+          queryParameters: {'datePeriod': _period(from, to)},
+        );
+        return AccountPeriodStatus.fromJson(res.data!);
+      });
+
+  /// Every history entry in the period, oldest first (for statements).
+  /// Stops at [max] entries; `truncated` tells the caller.
+  Future<({List<HistoryEntry> items, bool truncated})> historyAll(
+      String accountType, DateTime from, DateTime to,
+      {int max = 3000}) async {
+    final all = <HistoryEntry>[];
+    var page = 0;
+    var more = true;
+    while (more && all.length < max) {
+      final p = await history(accountType, page: page, pageSize: 100, from: from, to: to);
+      all.addAll(p.items);
+      more = p.hasNext && p.items.isNotEmpty;
+      page++;
+    }
+    all.sort((a, b) => a.date.compareTo(b.date));
+    return (items: all.take(max).toList(), truncated: more || all.length > max);
+  }
+
+  /// Export formats Cyclos offers for this account's history (e.g. pdf, csv),
+  /// from GET /self/accounts/{type}/data-for-history.
+  Future<List<(String, String)>> historyExportFormats(String accountType) => _guard(() async {
+        final res = await _dio.get<Map<String, dynamic>>(
+            '/self/accounts/$accountType/data-for-history',
+            queryParameters: {'fields': 'exportFormats'});
+        final f = res.data?['exportFormats'];
+        return f is List
+            ? [
+                for (final e in f.whereType<Map>())
+                  ('${e['internalName'] ?? e['id']}', '${e['name'] ?? e['internalName']}'),
+              ]
+            : <(String, String)>[];
+      });
+
+  /// GET /self/accounts/{type}/history/export/{format} — Cyclos's own
+  /// statement file for the period.
+  Future<Uint8List> exportHistory(
+          String accountType, String format, DateTime from, DateTime to) =>
+      _guard(() async {
+        final res = await _dio.get<List<int>>(
+          '/self/accounts/$accountType/history/export/${Uri.encodeComponent(format)}',
+          queryParameters: {'datePeriod': _period(from, to)},
+          options: Options(responseType: ResponseType.bytes, headers: {'Accept': '*/*'}),
+        );
+        return Uint8List.fromList(res.data ?? const []);
+      });
+
   /// POST /auth/otp?medium=sms — sends a one-time code when the
   /// confirmation password type is an OTP.
   Future<void> sendOtp({String medium = 'sms'}) => _guard(

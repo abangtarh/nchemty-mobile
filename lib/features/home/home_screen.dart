@@ -53,6 +53,7 @@ class HomeScreen extends ConsumerWidget {
                       if (v == 'services') context.push('/services');
                       if (v == 'verify') context.push('/verify');
                       if (v == 'agents') context.push('/agents');
+                      if (v == 'statement') context.push('/statement');
                       if (v == 'terms') openLegalPage(context, Env.termsUrl);
                       if (v == 'confidentiality') openLegalPage(context, Env.confidentialityUrl);
                       if (v == 'privacy') openLegalPage(context, Env.privacyUrl);
@@ -72,6 +73,7 @@ class HomeScreen extends ConsumerWidget {
                       const PopupMenuItem(value: 'services', child: Text('Services')),
                       const PopupMenuItem(value: 'verify', child: Text('Verify a receipt')),
                       PopupMenuItem(value: 'agents', child: Text(s.t('findAgent'))),
+                      PopupMenuItem(value: 'statement', child: Text(s.t('statements'))),
                       PopupMenuItem(value: 'products', child: Text(s.t('loansSavings'))),
                       PopupMenuItem(value: 'kyc', child: Text(s.t('verifyId'))),
                       const PopupMenuItem(value: 'lang', child: Text('English / Français')),
