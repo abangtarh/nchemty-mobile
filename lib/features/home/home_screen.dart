@@ -52,6 +52,7 @@ class HomeScreen extends ConsumerWidget {
                       if (v == 'kyc') openKycWizard(context, s.t('verifyId'));
                       if (v == 'services') context.push('/services');
                       if (v == 'verify') context.push('/verify');
+                      if (v == 'agents') context.push('/agents');
                       if (v == 'terms') openLegalPage(context, Env.termsUrl);
                       if (v == 'confidentiality') openLegalPage(context, Env.confidentialityUrl);
                       if (v == 'privacy') openLegalPage(context, Env.privacyUrl);
@@ -70,6 +71,7 @@ class HomeScreen extends ConsumerWidget {
                     itemBuilder: (_) => [
                       const PopupMenuItem(value: 'services', child: Text('Services')),
                       const PopupMenuItem(value: 'verify', child: Text('Verify a receipt')),
+                      PopupMenuItem(value: 'agents', child: Text(s.t('findAgent'))),
                       PopupMenuItem(value: 'products', child: Text(s.t('loansSavings'))),
                       PopupMenuItem(value: 'kyc', child: Text(s.t('verifyId'))),
                       const PopupMenuItem(value: 'lang', child: Text('English / Français')),
@@ -155,6 +157,21 @@ class HomeScreen extends ConsumerWidget {
                   ])
                     Expanded(child: a),
                 ],
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: AppColors.goldLight,
+                    foregroundColor: AppColors.greenDark,
+                    child: Icon(Icons.location_on_outlined),
+                  ),
+                  title: Text(s.t('findAgent'),
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text(s.t('findAgentHint')),
+                  trailing: const Icon(Icons.chevron_right, color: AppColors.muted),
+                  onTap: () => context.push('/agents'),
+                ),
               ),
               const SizedBox(height: 24),
               Text(s.t('accounts'),

@@ -70,6 +70,13 @@ class Env {
   static const accountClosureUrl = String.fromEnvironment('ACCOUNT_CLOSURE_URL',
       defaultValue: 'https://www.nchemty.com/p/account-closure');
 
+  /// Branches and agents (Find an agent). The app reads FIND_US_JSON_URL if
+  /// the website offers it (docs/find-us-json.md), else the find-us page.
+  static const findUsUrl =
+      String.fromEnvironment('FIND_US_URL', defaultValue: 'https://nchemty.com/find-us');
+  static const locationsJsonUrl = String.fromEnvironment('FIND_US_JSON_URL',
+      defaultValue: 'https://nchemty.com/find-us.json');
+
   static const idleLockAfter = Duration(minutes: 5);
   static const backgroundLockAfter = Duration(seconds: 60);
 

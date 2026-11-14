@@ -53,6 +53,12 @@ class S {
     'confidentialityLink': {'en': 'Confidentiality agreement', 'fr': 'Accord de confidentialité'},
     'privacyLink': {'en': 'Privacy notice', 'fr': 'Notice de confidentialité'},
     'closeAccountLink': {'en': 'Close my account', 'fr': 'Clôturer mon compte'},
+    'findAgent': {'en': 'Find an agent', 'fr': 'Trouver un agent'},
+    'findAgentHint': {
+      'en': 'Nearest branch or agent, with directions',
+      'fr': 'Agence ou agent le plus proche, avec itinéraire',
+    },
+    'allServices': {'en': 'All', 'fr': 'Tous'},
     'legalMenu': {'en': 'Terms & privacy', 'fr': 'Conditions et confidentialité'},
   };
 

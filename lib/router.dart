@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'data/cyclos/cyclos_qr_api.dart';
+import 'features/agents/find_agent_screen.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/pin_screen.dart';
@@ -66,6 +67,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/services', builder: (_, __) => const ServicesScreen()),
       GoRoute(path: '/qr/scan', builder: (_, __) => const ScanToPayScreen()),
       GoRoute(path: '/qr/receive', builder: (_, __) => const ReceiveQrScreen()),
+      GoRoute(path: '/agents', builder: (_, __) => const FindAgentScreen()),
       GoRoute(
         path: '/verify',
         builder: (_, s) => VerifyReceiptScreen(scanned: s.extra as ReceiptQr?),
