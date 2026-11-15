@@ -263,18 +263,27 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
     );
     if (!mounted) return;
     ref.invalidate(accountsProvider);
-    await showDialog<void>(
+    final immediate = _when == _When.now;
+    final showReceipt = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         icon: const Icon(Icons.check_circle, color: AppColors.credit, size: 48),
-        title: Text(_when == _When.now ? s.t('success') : 'Payment scheduled'),
+        title: Text(immediate ? s.t('success') : 'Payment scheduled'),
         content: Text('${Money.xaf(p.amount)} to ${p.recipient}\nReference: $tx'),
         actions: [
-          FilledButton(onPressed: () => Navigator.pop(c), child: Text(s.t('done'))),
+          if (immediate)
+            TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('View receipt')),
+          FilledButton(onPressed: () => Navigator.pop(c, false), child: Text(s.t('done'))),
         ],
       ),
     );
-    if (mounted) context.pop();
+    if (!mounted) return;
+    if (showReceipt == true) {
+      context.pushReplacement(
+          '/transfer-details/${Uri.encodeComponent(CyclosApi.escapeNumeric(tx))}');
+    } else {
+      context.pop();
+    }
   }
 
   Future<void> _pickDate() async {

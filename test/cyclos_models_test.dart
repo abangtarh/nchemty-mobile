@@ -124,4 +124,36 @@ void main() {
     ));
     expect(e.isWrongConfirmation, isTrue);
   });
+
+  test('history entry key escapes numeric transaction numbers', () {
+    HistoryEntry e(String? n) => HistoryEntry.fromJson({
+          'id': 'abc',
+          'amount': '10',
+          'date': '2026-10-24T10:00:00Z',
+          if (n != null) 'transactionNumber': n,
+        });
+    expect(e('12345').key, "'12345");
+    expect(e('TX-9').key, 'TX-9');
+    expect(e(null).key, 'abc');
+  });
+
+  test('transfer details read parties, fees and statuses', () {
+    final t = TransferDetails.fromJson({
+      'id': '1',
+      'date': '2026-10-24T10:00:00Z',
+      'amount': '-5000',
+      'transactionNumber': 'TX-1',
+      'from': {'user': {'display': 'Abang'}, 'type': {'name': 'Current'}},
+      'to': {'type': {'name': 'MoMo Transactions'}},
+      'type': {'name': 'Cash out'},
+      'children': [
+        {'amount': '39', 'type': {'name': 'Cash-out fee'}}
+      ],
+      'statuses': {'flow1': {'name': 'Completed'}},
+    });
+    expect(t.fromName, 'Abang');
+    expect(t.toName, 'MoMo Transactions');
+    expect(t.fees.single.$2, 39);
+    expect(t.statuses, ['Completed']);
+  });
 }

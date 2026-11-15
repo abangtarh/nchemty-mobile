@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Nchemty Mobile</string>
+	<string>Nchemty</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -68,6 +68,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Nchemty uses the camera to scan payment QR codes and photograph your ID.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Nchemty uses your location to show the nearest branch or agent and give directions.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Unlock Nchemty with Face ID.</string>
 </dict>

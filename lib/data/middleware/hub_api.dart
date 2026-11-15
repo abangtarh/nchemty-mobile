@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
@@ -29,54 +28,6 @@ class HubApi {
     return List.generate(16, (_) => rnd.nextInt(256).toRadixString(16).padLeft(2, '0'))
         .join();
   }
-
-  // ---- MoMo ----
-
-  Future<MomoRequest> momoTopup({
-    required String msisdn,
-    required int amount,
-    required String idempotencyKey,
-  }) =>
-      _guard(() async {
-        final res = await _dio.post<Map<String, dynamic>>(
-          '/momo/topup',
-          data: {'msisdn': msisdn, 'amount': amount},
-          options: Options(headers: {'Idempotency-Key': idempotencyKey}),
-        );
-        return MomoRequest.fromJson(res.data!);
-      });
-
-  Future<MomoRequest> momoStatus(String requestId) => _guard(() async {
-        final res =
-            await _dio.get<Map<String, dynamic>>('/momo/requests/$requestId');
-        return MomoRequest.fromJson(res.data!);
-      });
-
-  Future<CashoutQuote> cashoutQuote({required String msisdn, required int amount}) =>
-      _guard(() async {
-        final res = await _dio.post<Map<String, dynamic>>(
-          '/momo/cashout/quote',
-          data: {'msisdn': msisdn, 'amount': amount},
-        );
-        return CashoutQuote.fromJson(res.data!);
-      });
-
-  Future<MomoRequest> cashout({
-    required String quoteId,
-    required String confirmationPassword,
-    required String idempotencyKey,
-  }) =>
-      _guard(() async {
-        final res = await _dio.post<Map<String, dynamic>>(
-          '/momo/cashout',
-          data: {'quoteId': quoteId},
-          options: Options(headers: {
-            'Confirmation-Password': confirmationPassword,
-            'Idempotency-Key': idempotencyKey,
-          }),
-        );
-        return MomoRequest.fromJson(res.data!);
-      });
 
   // ---- Loans (wraps LoanCoreLib operations) ----
 
@@ -144,39 +95,6 @@ class HubApi {
             options:
                 Options(headers: {'Confirmation-Password': confirmationPassword}),
           ));
-
-  // ---- KYC (existing 7-stage pipeline, OCR server-side) ----
-
-  Future<String> startKyc() => _guard(() async {
-        final res = await _dio.post<Map<String, dynamic>>('/kyc/session');
-        return res.data!['sessionId'].toString();
-      });
-
-  Future<Map<String, dynamic>> uploadKycImage({
-    required String sessionId,
-    required String stage, // selfie | document_front | document_back
-    required File image,
-    String? documentType, // CNI | PASSPORT | DRIVING_LICENCE
-  }) =>
-      _guard(() async {
-        final form = FormData.fromMap({
-          'stage': stage,
-          if (documentType != null) 'documentType': documentType,
-          'image': await MultipartFile.fromFile(image.path,
-              filename: '$stage.jpg'),
-        });
-        final res = await _dio.post<Map<String, dynamic>>(
-          '/kyc/$sessionId/upload',
-          data: form,
-          options: Options(contentType: 'multipart/form-data'),
-        );
-        return res.data!;
-      });
-
-  Future<Map<String, dynamic>> kycStatus(String sessionId) => _guard(() async {
-        final res = await _dio.get<Map<String, dynamic>>('/kyc/$sessionId');
-        return res.data!;
-      });
 }
 
 final hubApiProvider =
