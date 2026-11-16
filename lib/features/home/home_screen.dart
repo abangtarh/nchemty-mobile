@@ -7,6 +7,7 @@ import '../../core/l10n/strings.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/money.dart';
+import '../../data/cyclos/cyclos_inbox_api.dart';
 import '../../data/cyclos/cyclos_operations_api.dart';
 import '../../data/models/models.dart';
 import '../auth/auth_controller.dart';
@@ -46,6 +47,19 @@ class HomeScreen extends ConsumerWidget {
                         style: const TextStyle(
                             fontSize: 20, fontWeight: FontWeight.w700)),
                   ),
+                  Builder(builder: (context) {
+                    final b = ref.watch(inboxBadgeProvider).valueOrNull;
+                    final n = (b?.unread ?? 0) + (b?.requests ?? 0);
+                    return IconButton(
+                      tooltip: s.t('inbox'),
+                      onPressed: () => context.push('/inbox'),
+                      icon: Badge(
+                        isLabelVisible: n > 0,
+                        label: Text(n > 99 ? '99+' : '$n'),
+                        child: const Icon(Icons.notifications_outlined),
+                      ),
+                    );
+                  }),
                   PopupMenuButton<String>(
                     tooltip: 'Menu',
                     onSelected: (v) {
@@ -160,6 +174,26 @@ class HomeScreen extends ConsumerWidget {
                     Expanded(child: a),
                 ],
               ),
+              Builder(builder: (context) {
+                final requests = ref.watch(inboxBadgeProvider).valueOrNull?.requests ?? 0;
+                if (requests == 0) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Card(
+                    color: AppColors.goldLight,
+                    child: ListTile(
+                      leading: const Icon(Icons.request_quote_outlined, color: AppColors.greenDark),
+                      title: Text(
+                          requests == 1
+                              ? s.t('oneRequestWaiting')
+                              : s.t('requestsWaiting').replaceAll('{n}', '$requests'),
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/inbox'),
+                    ),
+                  ),
+                );
+              }),
               const SizedBox(height: 16),
               Card(
                 child: ListTile(

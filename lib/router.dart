@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'data/cyclos/cyclos_qr_api.dart';
 import 'features/agents/find_agent_screen.dart';
 import 'features/auth/auth_controller.dart';
+import 'features/inbox/inbox_screen.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/pin_screen.dart';
 import 'features/history/history_screen.dart';
@@ -69,6 +70,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/qr/scan', builder: (_, __) => const ScanToPayScreen()),
       GoRoute(path: '/qr/receive', builder: (_, __) => const ReceiveQrScreen()),
       GoRoute(path: '/agents', builder: (_, __) => const FindAgentScreen()),
+      GoRoute(path: '/inbox', builder: (_, __) => const InboxScreen()),
+      GoRoute(
+        path: '/payment-request/:key',
+        builder: (_, s) => PaymentRequestScreen(requestKey: s.pathParameters['key']!),
+      ),
       GoRoute(
         path: '/statement',
         builder: (_, s) => StatementScreen(accountType: s.uri.queryParameters['account']),

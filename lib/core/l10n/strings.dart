@@ -53,6 +53,17 @@ class S {
     'confidentialityLink': {'en': 'Confidentiality agreement', 'fr': 'Accord de confidentialité'},
     'privacyLink': {'en': 'Privacy notice', 'fr': 'Notice de confidentialité'},
     'closeAccountLink': {'en': 'Close my account', 'fr': 'Clôturer mon compte'},
+    'inbox': {'en': 'Inbox', 'fr': 'Boîte de réception'},
+    'requestsTab': {'en': 'Requests', 'fr': 'Demandes'},
+    'notificationsTab': {'en': 'Notifications', 'fr': 'Notifications'},
+    'oneRequestWaiting': {
+      'en': '1 payment request is waiting for you',
+      'fr': '1 demande de paiement vous attend',
+    },
+    'requestsWaiting': {
+      'en': '{n} payment requests are waiting for you',
+      'fr': '{n} demandes de paiement vous attendent',
+    },
     'statement': {'en': 'Statement', 'fr': 'Relevé'},
     'statements': {'en': 'Account statements', 'fr': 'Relevés de compte'},
     'findAgent': {'en': 'Find an agent', 'fr': 'Trouver un agent'},
