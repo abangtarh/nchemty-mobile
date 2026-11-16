@@ -20,6 +20,12 @@ Developer: Abang (Sure Engineering & Technologies). Develops on Windows 11
   only loans (LoanCoreLib) and ACAO DailySaver (ACAOCoreLib) remain, behind
   `HUB_ENABLED`. Contract in `docs/middleware-contract.md` (its MoMo and KYC
   sections are no longer used by the app).
+- **Push notifications**: Firebase project `nchemty-d07fd` (same as the old
+  published apps). Options in `lib/core/push/firebase_options.dart`; the app
+  registers its FCM token with Cyclos (`/firebase/fcm-tokens`) after sign-in
+  and removes it on sign-out. Cyclos sends the pushes (its Firebase settings
+  must use the same project). In-app: bell + Inbox (`/notifications`,
+  payment requests via `/self/transactions?kinds=paymentRequest`).
 - Cyclos is the single source of truth for balances; the app never computes them.
 - Stack: Riverpod 2.x, go_router 14, dio 5, flutter_secure_storage, local_auth,
   url_launcher, mobile_scanner, pdf, printing. EN/FR strings in `lib/core/l10n/strings.dart`.

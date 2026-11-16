@@ -3,6 +3,7 @@ import 'package:local_auth/local_auth.dart';
 
 import '../../core/network/api_exception.dart';
 import '../../core/network/dio_factory.dart';
+import '../../core/push/push_service.dart';
 import '../../core/storage/secure_store.dart';
 import '../../data/cyclos/cyclos_api.dart';
 import '../../data/models/models.dart';
@@ -282,6 +283,8 @@ class AuthController extends Notifier<AuthState> {
   /// Sign out: ends the session and forgets the PIN on this phone, so the
   /// next start asks for the password (the username stays filled in).
   Future<void> logout() async {
+    // Stop push notifications to this phone while the session still works.
+    if (_session.token != null) await ref.read(pushServiceProvider).unregister();
     try {
       if (_session.token != null) await _api.logout();
     } catch (_) {

@@ -68,6 +68,10 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Nchemty uses the camera to scan payment QR codes and photograph your ID.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Nchemty uses your location to show the nearest branch or agent and give directions.</string>
 	<key>NSFaceIDUsageDescription</key>
