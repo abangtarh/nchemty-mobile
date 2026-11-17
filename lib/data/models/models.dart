@@ -322,18 +322,24 @@ class PrincipalTypeInput {
   /// Cyclos did not list for the channel (found with fallbacks instead).
   final bool fromCyclos;
 
-  /// Phone, e-mail and login name are always offered: Cyclos's own entries
-  /// first, then built-in ones for the kinds it did not list, then any other
-  /// method Cyclos allows (account number, custom field...).
+  /// Exactly three ways to find a payee: login name, phone and e-mail.
+  /// Cyclos's own entry is used when it lists that kind (its internal name),
+  /// otherwise a built-in one. Other Cyclos methods (account number, custom
+  /// fields...) are deliberately not offered.
   static List<PrincipalTypeInput> withStandard(List<PrincipalTypeInput> cyclos) {
     const builtIn = [
+      PrincipalTypeInput(key: 'username', name: 'Login name', kind: 'username', fromCyclos: false),
       PrincipalTypeInput(key: 'mobilePhone', name: 'Phone', kind: 'mobilePhone', fromCyclos: false),
       PrincipalTypeInput(key: 'email', name: 'E-mail', kind: 'email', fromCyclos: false),
-      PrincipalTypeInput(key: 'username', name: 'Login name', kind: 'username', fromCyclos: false),
     ];
     return [
-      for (final b in builtIn) cyclos.where((c) => c.kind == b.kind).firstOrNull ?? b,
-      ...cyclos.where((c) => !builtIn.any((b) => b.kind == c.kind)),
+      for (final b in builtIn)
+        switch (cyclos.where((c) => c.kind == b.kind).firstOrNull) {
+          null => b,
+          // Cyclos's internal name, the app's short label.
+          final c => PrincipalTypeInput(
+              key: c.key, name: b.name, kind: c.kind, example: c.example, mask: c.mask),
+        },
     ];
   }
 

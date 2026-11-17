@@ -183,8 +183,9 @@ void main() {
       const PrincipalTypeInput(key: 'acc', name: 'Account number', kind: 'accountNumber'),
     ];
     final all = PrincipalTypeInput.withStandard(cyclosOnly);
-    expect(all.map((t) => t.kind), ['mobilePhone', 'email', 'username', 'accountNumber']);
-    expect(all[2].key, 'login'); // Cyclos's own entry wins
-    expect(all[0].fromCyclos, isFalse);
+    expect(all.map((t) => t.kind), ['username', 'mobilePhone', 'email']);
+    expect(all.map((t) => t.name), ['Login name', 'Phone', 'E-mail']);
+    expect(all[0].key, 'login'); // Cyclos's internal name is used
+    expect(all[1].fromCyclos, isFalse);
   });
 }
