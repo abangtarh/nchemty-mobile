@@ -131,11 +131,16 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
   ///  2. Cyclos's general lookup (`*:value`, every method it allows);
   /// Members are never searched or listed by name (privacy): the payer must
   /// know the payee's exact phone, e-mail or login name.
-  Future<CyclosUser> _findPayee(PrincipalTypeInput type, String value) async {
+  Future<({CyclosUser user, String locator})> _findPayee(
+      PrincipalTypeInput type, String value) async {
     final v = value.trim();
-    Future<CyclosUser?> attempt(String locator) async {
+
+    // Like the Cyclos web: give the identifier straight to the payment
+    // (data-for-perform?to=mobilePhone:677…). This only needs permission to
+    // pay the member, not to view their profile, which /locate requires.
+    Future<CyclosUser?> asPayee(String locator) async {
       try {
-        return await _api.locateUser(locator);
+        return (await _api.paymentData(to: locator)).payee;
       } on ApiException catch (e) {
         // Network or server failure: report it, don't mask it as "not found".
         if (e.statusCode == null || e.statusCode! >= 500) rethrow;
@@ -143,20 +148,33 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
       }
     }
 
-    // Each spelling (phones: 677…, +237677…, 237677…), first with the exact
-    // identification method, then with Cyclos's any-method lookup.
-    for (final c in type.candidates(v)) {
-      final exact = await attempt('${type.key}:$c');
-      if (exact != null) return exact;
-    }
-    for (final c in type.candidates(v)) {
-      final anyMethod = await attempt('*:$c');
-      if (anyMethod != null) return anyMethod;
+    Future<CyclosUser?> located(String locator) async {
+      try {
+        return await _api.locateUser(locator);
+      } on ApiException catch (e) {
+        if (e.statusCode == null || e.statusCode! >= 500) rethrow;
+        return null;
+      }
     }
 
+    // Each spelling (phones: 677…, +237677…, 237677…), exact method first,
+    // then Cyclos's any-method form; /locate only as a last resort.
+    final locators = [
+      for (final c in type.candidates(v)) '${type.key}:$c',
+      for (final c in type.candidates(v)) '*:$c',
+    ];
+    for (final l in locators) {
+      final u = await asPayee(l);
+      if (u != null) return (user: u, locator: l);
+    }
+    for (final l in locators) {
+      final u = await located(l);
+      if (u != null) return (user: u, locator: l);
+    }
     throw ApiException(
         'No member found with this ${type.name.toLowerCase()}. Check it and try again.');
   }
+
 
   // 2–3. payee, then the types towards them
   Future<void> _choosePayee(CyclosUser user, String locator) async {
@@ -380,8 +398,8 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                             PrincipalTypeInput.withStandard(_start?.principalTypes ?? const []),
                         defaultPrincipalType: _start?.defaultPrincipalType,
                         onLocate: (type, value) => _run(() async {
-                          final u = await _findPayee(type, value);
-                          await _choosePayee(u, u.id);
+                          final found = await _findPayee(type, value);
+                          await _choosePayee(found.user, found.locator);
                         }),
                       )
                     else
