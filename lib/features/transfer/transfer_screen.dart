@@ -143,10 +143,16 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
       }
     }
 
-    final exact = await attempt(type.locator(v));
-    if (exact != null) return exact;
-    final anyMethod = await attempt('*:${type.locator(v).substring(type.key.length + 1)}');
-    if (anyMethod != null) return anyMethod;
+    // Each spelling (phones: 677…, +237677…, 237677…), first with the exact
+    // identification method, then with Cyclos's any-method lookup.
+    for (final c in type.candidates(v)) {
+      final exact = await attempt('${type.key}:$c');
+      if (exact != null) return exact;
+    }
+    for (final c in type.candidates(v)) {
+      final anyMethod = await attempt('*:$c');
+      if (anyMethod != null) return anyMethod;
+    }
 
     throw ApiException(
         'No member found with this ${type.name.toLowerCase()}. Check it and try again.');

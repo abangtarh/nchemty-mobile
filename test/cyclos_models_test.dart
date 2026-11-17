@@ -188,4 +188,11 @@ void main() {
     expect(all[0].key, 'login'); // Cyclos's internal name is used
     expect(all[1].fromCyclos, isFalse);
   });
+
+  test('phone spellings tried for Cameroon numbers', () {
+    const phone = PrincipalTypeInput(key: 'mobilePhone', name: 'Phone', kind: 'mobilePhone');
+    expect(phone.candidates('677 12 34 56'), ['677123456', '+237677123456', '237677123456']);
+    expect(phone.candidates('+237 677-12-34-56'), ['+237677123456', '677123456', '237677123456']);
+    expect(phone.candidates('00237677123456'), ['+237677123456', '677123456', '237677123456']);
+  });
 }

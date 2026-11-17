@@ -360,6 +360,23 @@ class PrincipalTypeInput {
         mask: j['mask'] as String?,
       );
 
+  /// Ways of writing the same Cameroon mobile number, as Cyclos may have
+  /// stored it: 677123456, +237677123456, 237677123456 (spaces, dashes and a
+  /// leading 00 removed). Other values: just the value.
+  List<String> candidates(String value) {
+    var v = value.trim();
+    if (kind == 'email') return [v.toLowerCase()];
+    if (kind != 'mobilePhone') return [v];
+    v = v.replaceAll(RegExp(r'[\s\-().]'), '');
+    if (v.startsWith('00')) v = '+${v.substring(2)}';
+    final digits = v.replaceAll(RegExp(r'[^0-9]'), '');
+    final local = digits.startsWith('237') && digits.length == 12 ? digits.substring(3) : digits;
+    return <String>{
+      v,
+      if (local.length == 9) ...['+237$local', local, '237$local'],
+    }.toList();
+  }
+
   /// Locator for GET /users/{locator}/locate.
   String locator(String value) {
     var v = value.trim();
