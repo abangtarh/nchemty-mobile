@@ -156,4 +156,24 @@ void main() {
     expect(t.fees.single.$2, 39);
     expect(t.statuses, ['Completed']);
   });
+
+  test('payee identification methods from data-for-perform', () {
+    final d = PaymentData.fromJson({
+      'accounts': [],
+      'allowAutocomplete': true,
+      'defaultIdMethod': 'principalType',
+      'defaultPrincipalType': 'mobilePhone',
+      'principalTypes': [
+        {'internalName': 'username', 'name': 'Username', 'kind': 'username'},
+        {'internalName': 'email', 'name': 'E-mail', 'kind': 'email'},
+        {'internalName': 'mobilePhone', 'name': 'Mobile phone', 'kind': 'mobilePhone', 'example': '677 12 34 56'},
+        {'internalName': 'qr', 'name': 'QR code', 'kind': 'token'},
+      ],
+    });
+    expect(d.principalTypes.map((p) => p.key), ['username', 'email', 'mobilePhone']);
+    expect(d.defaultPrincipalType, 'mobilePhone');
+    final phone = d.principalTypes.last;
+    expect(phone.locator(' 677 12-34-56 '), 'mobilePhone:677123456');
+    expect(d.principalTypes[1].locator('Jane@Mail.com'), 'email:jane@mail.com');
+  });
 }

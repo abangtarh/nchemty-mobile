@@ -56,6 +56,7 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
   ApiException? _error;
 
   List<Account> _accounts = const [];
+  PaymentData? _start; // data-for-perform before a payee: identification methods
   Account? _from;
   CyclosUser? _payee;
   String? _payeeLocator; // what is sent as `to` / `subject`
@@ -117,6 +118,7 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
         final preferred = ref.read(mainAccountProvider).valueOrNull;
         if (!mounted) return;
         setState(() {
+          _start = d;
           _accounts = d.accounts;
           _from = d.accounts.firstWhere((a) => a.id == preferred?.id,
               orElse: () => d.accounts.first);
@@ -344,6 +346,23 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                       _PayeeSearch(
                         api: _api,
                         enabled: !locked,
+                        allowSearch: _start?.allowAutocomplete ?? true,
+                        principalTypes: _start?.principalTypes ?? const [],
+                        defaultIdMethod: _start?.defaultIdMethod,
+                        defaultPrincipalType: _start?.defaultPrincipalType,
+                        onLocate: (locator) => _run(() async {
+                          CyclosUser u;
+                          try {
+                            u = await _api.locateUser(locator);
+                          } on ApiException catch (e) {
+                            if (e.isNotFound) {
+                              throw ApiException(
+                                  'No member found with these details. Check them and try again.');
+                            }
+                            rethrow;
+                          }
+                          await _choosePayee(u, u.id);
+                        }),
                         onPicked: (u) => _choosePayee(u, u.id),
                         onTyped: (text) => _run(() async {
                           final u = await _api.locateUser(CyclosApi.escapeNumeric(text));
@@ -590,11 +609,28 @@ class _PayeeSearch extends StatefulWidget {
     required this.enabled,
     required this.onPicked,
     required this.onTyped,
+    required this.onLocate,
+    this.allowSearch = true,
+    this.principalTypes = const [],
+    this.defaultIdMethod,
+    this.defaultPrincipalType,
   });
   final CyclosApi api;
   final bool enabled;
   final void Function(CyclosUser) onPicked;
   final void Function(String) onTyped;
+
+  /// Finds the payee with a locator such as `mobilePhone:677123456`.
+  final void Function(String locator) onLocate;
+
+  /// Free search by name allowed (Cyclos allowAutocomplete).
+  final bool allowSearch;
+
+  /// Identification methods configured in Cyclos for this channel
+  /// (phone, e-mail, username, account number...).
+  final List<PrincipalTypeInput> principalTypes;
+  final String? defaultIdMethod;
+  final String? defaultPrincipalType;
 
   @override
   State<_PayeeSearch> createState() => _PayeeSearchState();
@@ -607,6 +643,22 @@ class _PayeeSearchState extends State<_PayeeSearch> {
   bool _searching = false;
   String? _error;
 
+  /// null = search by name; otherwise the chosen identification method.
+  PrincipalTypeInput? _method;
+
+  @override
+  void initState() {
+    super.initState();
+    final types = widget.principalTypes;
+    final wantsPrincipal =
+        widget.defaultIdMethod == 'principalType' || !widget.allowSearch;
+    if (types.isNotEmpty && wantsPrincipal) {
+      _method = types.firstWhere(
+          (t) => t.key == widget.defaultPrincipalType,
+          orElse: () => types.first);
+    }
+  }
+
   @override
   void dispose() {
     _debounce?.cancel();
@@ -614,7 +666,21 @@ class _PayeeSearchState extends State<_PayeeSearch> {
     super.dispose();
   }
 
+  void _select(PrincipalTypeInput? m) {
+    _debounce?.cancel();
+    setState(() {
+      _method = m;
+      _results = const [];
+      _error = null;
+      _ctrl.clear();
+    });
+  }
+
   void _onChanged(String text) {
+    if (_method != null) {
+      setState(() => _error = null);
+      return;
+    }
     _debounce?.cancel();
     if (text.trim().length < 2) {
       setState(() => _results = const []);
@@ -637,23 +703,86 @@ class _PayeeSearchState extends State<_PayeeSearch> {
     });
   }
 
+  void _submit() {
+    final v = _ctrl.text.trim();
+    if (v.isEmpty) return;
+    final m = _method;
+    if (m != null) {
+      widget.onLocate(m.locator(v));
+    } else {
+      widget.onTyped(v);
+    }
+  }
+
+  IconData _icon(PrincipalTypeInput t) => switch (t.kind) {
+        'mobilePhone' => Icons.phone_iphone,
+        'email' => Icons.alternate_email,
+        'username' => Icons.person_outline,
+        'accountNumber' => Icons.numbers,
+        _ => Icons.badge_outlined,
+      };
+
+  TextInputType _keyboard(PrincipalTypeInput? t) => switch (t?.kind) {
+        'mobilePhone' => TextInputType.phone,
+        'email' => TextInputType.emailAddress,
+        'accountNumber' => TextInputType.number,
+        _ => TextInputType.text,
+      };
+
   @override
   Widget build(BuildContext context) {
     final text = _ctrl.text.trim();
+    final m = _method;
+    final types = widget.principalTypes;
+    final showChips = types.isNotEmpty && (widget.allowSearch || types.length > 1);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (showChips) ...[
+          const Text('Find the member by', style: TextStyle(color: AppColors.muted)),
+          const SizedBox(height: 6),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              if (widget.allowSearch)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    avatar: const Icon(Icons.search, size: 18),
+                    label: const Text('Name'),
+                    selected: m == null,
+                    onSelected: widget.enabled ? (_) => _select(null) : null,
+                  ),
+                ),
+              for (final t in types)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    avatar: Icon(_icon(t), size: 18),
+                    label: Text(t.name),
+                    selected: m?.key == t.key,
+                    onSelected: widget.enabled ? (_) => _select(t) : null,
+                  ),
+                ),
+            ]),
+          ),
+          const SizedBox(height: 10),
+        ],
         TextField(
           controller: _ctrl,
           enabled: widget.enabled,
           autofocus: true,
+          keyboardType: _keyboard(m),
+          textInputAction: TextInputAction.search,
+          autocorrect: false,
           onChanged: _onChanged,
-          onSubmitted: (v) {
-            if (v.trim().isNotEmpty) widget.onTyped(v.trim());
-          },
+          onSubmitted: (_) => _submit(),
           decoration: InputDecoration(
-            labelText: 'To: name, username, phone or account',
-            prefixIcon: const Icon(Icons.search),
+            labelText: m == null
+                ? (types.isEmpty ? 'To: name, username, phone or account' : 'To: member name')
+                : 'To: ${m.name}',
+            hintText: m?.example ?? m?.mask,
+            prefixIcon: Icon(m == null ? Icons.search : _icon(m)),
             suffixIcon: _searching
                 ? const Padding(
                     padding: EdgeInsets.all(14),
@@ -668,24 +797,33 @@ class _PayeeSearchState extends State<_PayeeSearch> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(_error!, style: const TextStyle(color: AppColors.debit)),
           ),
-        for (final u in _results)
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: CircleAvatar(
-              backgroundColor: AppColors.goldLight,
-              foregroundColor: AppColors.greenDark,
-              child: Text(u.initials),
-            ),
-            title: Text(u.display),
-            subtitle: u.subtitle == null ? null : Text(u.subtitle!),
-            onTap: widget.enabled ? () => widget.onPicked(u) : null,
-          ),
-        if (text.length >= 3 && !_searching)
-          TextButton.icon(
-            onPressed: widget.enabled ? () => widget.onTyped(text) : null,
+        if (m != null) ...[
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: widget.enabled && text.isNotEmpty ? _submit : null,
             icon: const Icon(Icons.person_search),
-            label: Text('Use "$text"'),
+            label: Text('Find by ${m.name.toLowerCase()}'),
           ),
+        ] else ...[
+          for (final u in _results)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                backgroundColor: AppColors.goldLight,
+                foregroundColor: AppColors.greenDark,
+                child: Text(u.initials),
+              ),
+              title: Text(u.display),
+              subtitle: u.subtitle == null ? null : Text(u.subtitle!),
+              onTap: widget.enabled ? () => widget.onPicked(u) : null,
+            ),
+          if (text.length >= 3 && !_searching)
+            TextButton.icon(
+              onPressed: widget.enabled ? () => widget.onTyped(text) : null,
+              icon: const Icon(Icons.person_search),
+              label: Text('Use "$text"'),
+            ),
+        ],
       ],
     );
   }

@@ -312,6 +312,37 @@ class PaymentTypeRules {
 }
 
 /// GET /self/payments/data-for-perform (Cyclos DataForTransaction).
+/// An identification method Cyclos accepts for the payee on this channel
+/// (username, e-mail, mobile phone, account number, custom field...).
+class PrincipalTypeInput {
+  const PrincipalTypeInput({required this.key, required this.name, this.kind, this.example, this.mask});
+
+  /// Internal name (or id): the locator prefix, as in `mobilePhone:677123456`.
+  final String key;
+  final String name;
+
+  /// username / email / mobilePhone / accountNumber / customField / token.
+  final String? kind;
+  final String? example;
+  final String? mask;
+
+  factory PrincipalTypeInput.fromJson(Map<String, dynamic> j) => PrincipalTypeInput(
+        key: '${j['internalName'] ?? j['id']}',
+        name: '${j['name'] ?? j['internalName'] ?? ''}',
+        kind: j['kind'] as String?,
+        example: j['example'] as String?,
+        mask: j['mask'] as String?,
+      );
+
+  /// Locator for GET /users/{locator}/locate.
+  String locator(String value) {
+    var v = value.trim();
+    if (kind == 'mobilePhone') v = v.replaceAll(RegExp(r'[\s\-().]'), '');
+    if (kind == 'email') v = v.toLowerCase();
+    return '$key:$v';
+  }
+}
+
 class PaymentData {
   PaymentData({
     required this.payee,
@@ -320,7 +351,18 @@ class PaymentData {
     this.rules,
     this.allowAutocomplete = true,
     this.allowContacts = false,
+    this.principalTypes = const [],
+    this.defaultPrincipalType,
+    this.defaultIdMethod,
   });
+
+  /// How the payee may be identified, as configured in Cyclos for this
+  /// channel (only returned before a payee is chosen).
+  final List<PrincipalTypeInput> principalTypes;
+  final String? defaultPrincipalType;
+
+  /// autocomplete / contacts / principalType.
+  final String? defaultIdMethod;
   final CyclosUser? payee;
   final List<PaymentType> paymentTypes;
 
@@ -351,6 +393,14 @@ class PaymentData {
       rules: selected == null ? null : PaymentTypeRules.fromJson(selected),
       allowAutocomplete: j['allowAutocomplete'] != false,
       allowContacts: j['allowContacts'] == true,
+      principalTypes: ((j['principalTypes'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => PrincipalTypeInput.fromJson(e.cast<String, dynamic>()))
+          // Tokens (QR/NFC) are handled by Scan, not typed here.
+          .where((p) => p.kind != 'token' && p.kind != 'accessClient' && p.kind != 'trustedDevice')
+          .toList(),
+      defaultPrincipalType: j['defaultPrincipalType'] as String?,
+      defaultIdMethod: j['defaultIdMethod'] as String?,
     );
   }
 }
