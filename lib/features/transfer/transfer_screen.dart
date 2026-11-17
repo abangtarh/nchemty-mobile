@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -131,8 +129,8 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
   ///  1. the exact identification method (`mobilePhone:677…`), when Cyclos
   ///     allows it on this channel;
   ///  2. Cyclos's general lookup (`*:value`, every method it allows);
-  ///  3. member search by keywords (name, e-mail, phone where Cyclos indexes
-  ///     them): used only when exactly one member matches.
+  /// Members are never searched or listed by name (privacy): the payer must
+  /// know the payee's exact phone, e-mail or login name.
   Future<CyclosUser> _findPayee(PrincipalTypeInput type, String value) async {
     final v = value.trim();
     Future<CyclosUser?> attempt(String locator) async {
@@ -150,24 +148,6 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
     final anyMethod = await attempt('*:${type.locator(v).substring(type.key.length + 1)}');
     if (anyMethod != null) return anyMethod;
 
-    final terms = <String>{v, if (type.kind == 'mobilePhone') ...[
-      v.replaceAll(RegExp(r'[\s\-().]'), ''),
-      v.replaceAll(RegExp(r'[^0-9]'), '').replaceFirst(RegExp(r'^237'), ''),
-    ]};
-    for (final t in terms) {
-      if (t.length < 3) continue;
-      List<CyclosUser> found;
-      try {
-        found = await _api.searchUsers(t);
-      } on ApiException catch (_) {
-        continue;
-      }
-      if (found.length == 1) return found.single;
-      if (found.length > 1) {
-        throw ApiException(
-            'Several members match "$v". Use the Name tab and pick the right one.');
-      }
-    }
     throw ApiException(
         'No member found with this ${type.name.toLowerCase()}. Check it and try again.');
   }
@@ -389,20 +369,12 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                     // 2. Payee
                     if (_payee == null)
                       _PayeeSearch(
-                        api: _api,
                         enabled: !locked,
-                        allowSearch: true,
                         principalTypes:
                             PrincipalTypeInput.withStandard(_start?.principalTypes ?? const []),
-                        defaultIdMethod: _start?.defaultIdMethod,
                         defaultPrincipalType: _start?.defaultPrincipalType,
                         onLocate: (type, value) => _run(() async {
                           final u = await _findPayee(type, value);
-                          await _choosePayee(u, u.id);
-                        }),
-                        onPicked: (u) => _choosePayee(u, u.id),
-                        onTyped: (text) => _run(() async {
-                          final u = await _api.locateUser(CyclosApi.escapeNumeric(text));
                           await _choosePayee(u, u.id);
                         }),
                       )
@@ -640,33 +612,22 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
 /// Payee field with live suggestions, like the official user field:
 /// type 2+ characters to search members; or type a phone / account
 /// number / username and press "Use".
+/// Payee step: the member types the payee's exact phone, e-mail or login
+/// name. There is no search by name and no list of members (privacy).
 class _PayeeSearch extends StatefulWidget {
   const _PayeeSearch({
-    required this.api,
     required this.enabled,
-    required this.onPicked,
-    required this.onTyped,
     required this.onLocate,
-    this.allowSearch = true,
-    this.principalTypes = const [],
-    this.defaultIdMethod,
+    required this.principalTypes,
     this.defaultPrincipalType,
   });
-  final CyclosApi api;
   final bool enabled;
-  final void Function(CyclosUser) onPicked;
-  final void Function(String) onTyped;
 
-  /// Finds the payee with a locator such as `mobilePhone:677123456`.
+  /// Finds the payee with the chosen identification method and value.
   final void Function(PrincipalTypeInput type, String value) onLocate;
 
-  /// Free search by name allowed (Cyclos allowAutocomplete).
-  final bool allowSearch;
-
-  /// Identification methods configured in Cyclos for this channel
-  /// (phone, e-mail, username, account number...).
+  /// Phone, e-mail, login name (+ any other method Cyclos allows).
   final List<PrincipalTypeInput> principalTypes;
-  final String? defaultIdMethod;
   final String? defaultPrincipalType;
 
   @override
@@ -675,79 +636,24 @@ class _PayeeSearch extends StatefulWidget {
 
 class _PayeeSearchState extends State<_PayeeSearch> {
   final _ctrl = TextEditingController();
-  Timer? _debounce;
-  List<CyclosUser> _results = const [];
-  bool _searching = false;
-  String? _error;
-
-  /// null = search by name; otherwise the chosen identification method.
-  PrincipalTypeInput? _method;
-
-  @override
-  void initState() {
-    super.initState();
-    // Start on Cyclos's default method if it has one, otherwise Phone.
-    final types = widget.principalTypes;
-    if (types.isNotEmpty) {
-      _method = types.firstWhere(
-          (t) => t.key == widget.defaultPrincipalType,
-          orElse: () => types.first);
-    }
-  }
+  late PrincipalTypeInput _method = widget.principalTypes.firstWhere(
+      (t) => t.key == widget.defaultPrincipalType,
+      orElse: () => widget.principalTypes.first);
 
   @override
   void dispose() {
-    _debounce?.cancel();
     _ctrl.dispose();
     super.dispose();
   }
 
-  void _select(PrincipalTypeInput? m) {
-    _debounce?.cancel();
-    setState(() {
-      _method = m;
-      _results = const [];
-      _error = null;
-      _ctrl.clear();
-    });
-  }
-
-  void _onChanged(String text) {
-    if (_method != null) {
-      setState(() => _error = null);
-      return;
-    }
-    _debounce?.cancel();
-    if (text.trim().length < 2) {
-      setState(() => _results = const []);
-      return;
-    }
-    _debounce = Timer(const Duration(milliseconds: 350), () async {
-      if (!mounted) return;
-      setState(() {
-        _searching = true;
-        _error = null;
+  void _select(PrincipalTypeInput m) => setState(() {
+        _method = m;
+        _ctrl.clear();
       });
-      try {
-        final r = await widget.api.searchUsers(text.trim());
-        if (mounted && _ctrl.text == text) setState(() => _results = r);
-      } on ApiException catch (e) {
-        if (mounted) setState(() => _error = e.message);
-      } finally {
-        if (mounted) setState(() => _searching = false);
-      }
-    });
-  }
 
   void _submit() {
     final v = _ctrl.text.trim();
-    if (v.isEmpty) return;
-    final m = _method;
-    if (m != null) {
-      widget.onLocate(m, v);
-    } else {
-      widget.onTyped(v);
-    }
+    if (v.isNotEmpty) widget.onLocate(_method, v);
   }
 
   IconData _icon(PrincipalTypeInput t) => switch (t.kind) {
@@ -758,7 +664,7 @@ class _PayeeSearchState extends State<_PayeeSearch> {
         _ => Icons.badge_outlined,
       };
 
-  TextInputType _keyboard(PrincipalTypeInput? t) => switch (t?.kind) {
+  TextInputType _keyboard(PrincipalTypeInput t) => switch (t.kind) {
         'mobilePhone' => TextInputType.phone,
         'email' => TextInputType.emailAddress,
         'accountNumber' => TextInputType.number,
@@ -767,36 +673,24 @@ class _PayeeSearchState extends State<_PayeeSearch> {
 
   @override
   Widget build(BuildContext context) {
-    final text = _ctrl.text.trim();
     final m = _method;
     final types = widget.principalTypes;
-    final showChips = types.isNotEmpty && (widget.allowSearch || types.length > 1);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (showChips) ...[
-          const Text('Find the member by', style: TextStyle(color: AppColors.muted)),
+        if (types.length > 1) ...[
+          const Text('Send to', style: TextStyle(color: AppColors.muted)),
           const SizedBox(height: 6),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(children: [
-              if (widget.allowSearch)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    avatar: const Icon(Icons.search, size: 18),
-                    label: const Text('Name'),
-                    selected: m == null,
-                    onSelected: widget.enabled ? (_) => _select(null) : null,
-                  ),
-                ),
               for (final t in types)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(
                     avatar: Icon(_icon(t), size: 18),
                     label: Text(t.name),
-                    selected: m?.key == t.key,
+                    selected: m.key == t.key,
                     onSelected: widget.enabled ? (_) => _select(t) : null,
                   ),
                 ),
@@ -811,55 +705,21 @@ class _PayeeSearchState extends State<_PayeeSearch> {
           keyboardType: _keyboard(m),
           textInputAction: TextInputAction.search,
           autocorrect: false,
-          onChanged: _onChanged,
+          enableSuggestions: false,
+          onChanged: (_) => setState(() {}),
           onSubmitted: (_) => _submit(),
           decoration: InputDecoration(
-            labelText: m == null
-                ? (types.isEmpty ? 'To: name, username, phone or account' : 'To: member name')
-                : 'To: ${m.name}',
-            hintText: m?.example ?? m?.mask,
-            prefixIcon: Icon(m == null ? Icons.search : _icon(m)),
-            suffixIcon: _searching
-                ? const Padding(
-                    padding: EdgeInsets.all(14),
-                    child: SizedBox(
-                        width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                  )
-                : null,
+            labelText: "Recipient's ${m.name.toLowerCase()}",
+            hintText: m.example ?? m.mask,
+            prefixIcon: Icon(_icon(m)),
           ),
         ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(_error!, style: const TextStyle(color: AppColors.debit)),
-          ),
-        if (m != null) ...[
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: widget.enabled && text.isNotEmpty ? _submit : null,
-            icon: const Icon(Icons.person_search),
-            label: Text('Find by ${m.name.toLowerCase()}'),
-          ),
-        ] else ...[
-          for (final u in _results)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(
-                backgroundColor: AppColors.goldLight,
-                foregroundColor: AppColors.greenDark,
-                child: Text(u.initials),
-              ),
-              title: Text(u.display),
-              subtitle: u.subtitle == null ? null : Text(u.subtitle!),
-              onTap: widget.enabled ? () => widget.onPicked(u) : null,
-            ),
-          if (text.length >= 3 && !_searching)
-            TextButton.icon(
-              onPressed: widget.enabled ? () => widget.onTyped(text) : null,
-              icon: const Icon(Icons.person_search),
-              label: Text('Use "$text"'),
-            ),
-        ],
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: widget.enabled && _ctrl.text.trim().isNotEmpty ? _submit : null,
+          icon: const Icon(Icons.person_search),
+          label: const Text('Find recipient'),
+        ),
       ],
     );
   }

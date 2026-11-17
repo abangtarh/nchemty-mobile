@@ -57,6 +57,10 @@ Learned so far:
   `type.from.id == account.type.id` → `data-for-perform?to=&type=` for rules
   (fixedAmount, maxInstallments, allowsRecurringPayments,
   descriptionAvailability) → preview → perform with `preview.payment`.
+- PRIVACY DECISION (Abang): no search or listing of members by name anywhere
+  in the app. The payee is found only by exact phone / e-mail / login name
+  (`<principalType>:<value>`, then `*:<value>`); the name is shown only to
+  confirm the recipient after an exact match.
 - Purely numeric identifiers must be sent as `'<digits>` (escapeNumeric),
   otherwise Cyclos treats them as internal ids.
 - Scanned QR values identify the payee as `*:<value>` (any principal type,
