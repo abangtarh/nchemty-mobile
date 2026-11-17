@@ -127,6 +127,51 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
         if (p != null) await _choosePayee(p, p.id);
       });
 
+  /// Finds the payee by phone / e-mail / login name:
+  ///  1. the exact identification method (`mobilePhone:677…`), when Cyclos
+  ///     allows it on this channel;
+  ///  2. Cyclos's general lookup (`*:value`, every method it allows);
+  ///  3. member search by keywords (name, e-mail, phone where Cyclos indexes
+  ///     them): used only when exactly one member matches.
+  Future<CyclosUser> _findPayee(PrincipalTypeInput type, String value) async {
+    final v = value.trim();
+    Future<CyclosUser?> attempt(String locator) async {
+      try {
+        return await _api.locateUser(locator);
+      } on ApiException catch (e) {
+        // Network or server failure: report it, don't mask it as "not found".
+        if (e.statusCode == null || e.statusCode! >= 500) rethrow;
+        return null;
+      }
+    }
+
+    final exact = await attempt(type.locator(v));
+    if (exact != null) return exact;
+    final anyMethod = await attempt('*:${type.locator(v).substring(type.key.length + 1)}');
+    if (anyMethod != null) return anyMethod;
+
+    final terms = <String>{v, if (type.kind == 'mobilePhone') ...[
+      v.replaceAll(RegExp(r'[\s\-().]'), ''),
+      v.replaceAll(RegExp(r'[^0-9]'), '').replaceFirst(RegExp(r'^237'), ''),
+    ]};
+    for (final t in terms) {
+      if (t.length < 3) continue;
+      List<CyclosUser> found;
+      try {
+        found = await _api.searchUsers(t);
+      } on ApiException catch (_) {
+        continue;
+      }
+      if (found.length == 1) return found.single;
+      if (found.length > 1) {
+        throw ApiException(
+            'Several members match "$v". Use the Name tab and pick the right one.');
+      }
+    }
+    throw ApiException(
+        'No member found with this ${type.name.toLowerCase()}. Check it and try again.');
+  }
+
   // 2–3. payee, then the types towards them
   Future<void> _choosePayee(CyclosUser user, String locator) async {
     setState(() {
@@ -346,21 +391,13 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                       _PayeeSearch(
                         api: _api,
                         enabled: !locked,
-                        allowSearch: _start?.allowAutocomplete ?? true,
-                        principalTypes: _start?.principalTypes ?? const [],
+                        allowSearch: true,
+                        principalTypes:
+                            PrincipalTypeInput.withStandard(_start?.principalTypes ?? const []),
                         defaultIdMethod: _start?.defaultIdMethod,
                         defaultPrincipalType: _start?.defaultPrincipalType,
-                        onLocate: (locator) => _run(() async {
-                          CyclosUser u;
-                          try {
-                            u = await _api.locateUser(locator);
-                          } on ApiException catch (e) {
-                            if (e.isNotFound) {
-                              throw ApiException(
-                                  'No member found with these details. Check them and try again.');
-                            }
-                            rethrow;
-                          }
+                        onLocate: (type, value) => _run(() async {
+                          final u = await _findPayee(type, value);
                           await _choosePayee(u, u.id);
                         }),
                         onPicked: (u) => _choosePayee(u, u.id),
@@ -621,7 +658,7 @@ class _PayeeSearch extends StatefulWidget {
   final void Function(String) onTyped;
 
   /// Finds the payee with a locator such as `mobilePhone:677123456`.
-  final void Function(String locator) onLocate;
+  final void Function(PrincipalTypeInput type, String value) onLocate;
 
   /// Free search by name allowed (Cyclos allowAutocomplete).
   final bool allowSearch;
@@ -649,10 +686,9 @@ class _PayeeSearchState extends State<_PayeeSearch> {
   @override
   void initState() {
     super.initState();
+    // Start on Cyclos's default method if it has one, otherwise Phone.
     final types = widget.principalTypes;
-    final wantsPrincipal =
-        widget.defaultIdMethod == 'principalType' || !widget.allowSearch;
-    if (types.isNotEmpty && wantsPrincipal) {
+    if (types.isNotEmpty) {
       _method = types.firstWhere(
           (t) => t.key == widget.defaultPrincipalType,
           orElse: () => types.first);
@@ -708,7 +744,7 @@ class _PayeeSearchState extends State<_PayeeSearch> {
     if (v.isEmpty) return;
     final m = _method;
     if (m != null) {
-      widget.onLocate(m.locator(v));
+      widget.onLocate(m, v);
     } else {
       widget.onTyped(v);
     }

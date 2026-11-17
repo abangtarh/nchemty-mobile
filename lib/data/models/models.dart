@@ -315,7 +315,27 @@ class PaymentTypeRules {
 /// An identification method Cyclos accepts for the payee on this channel
 /// (username, e-mail, mobile phone, account number, custom field...).
 class PrincipalTypeInput {
-  const PrincipalTypeInput({required this.key, required this.name, this.kind, this.example, this.mask});
+  const PrincipalTypeInput(
+      {required this.key, required this.name, this.kind, this.example, this.mask, this.fromCyclos = true});
+
+  /// False for the app's built-in Phone / E-mail / Login name entries that
+  /// Cyclos did not list for the channel (found with fallbacks instead).
+  final bool fromCyclos;
+
+  /// Phone, e-mail and login name are always offered: Cyclos's own entries
+  /// first, then built-in ones for the kinds it did not list, then any other
+  /// method Cyclos allows (account number, custom field...).
+  static List<PrincipalTypeInput> withStandard(List<PrincipalTypeInput> cyclos) {
+    const builtIn = [
+      PrincipalTypeInput(key: 'mobilePhone', name: 'Phone', kind: 'mobilePhone', fromCyclos: false),
+      PrincipalTypeInput(key: 'email', name: 'E-mail', kind: 'email', fromCyclos: false),
+      PrincipalTypeInput(key: 'username', name: 'Login name', kind: 'username', fromCyclos: false),
+    ];
+    return [
+      for (final b in builtIn) cyclos.where((c) => c.kind == b.kind).firstOrNull ?? b,
+      ...cyclos.where((c) => !builtIn.any((b) => b.kind == c.kind)),
+    ];
+  }
 
   /// Internal name (or id): the locator prefix, as in `mobilePhone:677123456`.
   final String key;

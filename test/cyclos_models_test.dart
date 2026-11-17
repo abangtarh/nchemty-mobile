@@ -176,4 +176,15 @@ void main() {
     expect(phone.locator(' 677 12-34-56 '), 'mobilePhone:677123456');
     expect(d.principalTypes[1].locator('Jane@Mail.com'), 'email:jane@mail.com');
   });
+
+  test('phone, e-mail and login name are always offered', () {
+    final cyclosOnly = [
+      const PrincipalTypeInput(key: 'login', name: 'Login name', kind: 'username'),
+      const PrincipalTypeInput(key: 'acc', name: 'Account number', kind: 'accountNumber'),
+    ];
+    final all = PrincipalTypeInput.withStandard(cyclosOnly);
+    expect(all.map((t) => t.kind), ['mobilePhone', 'email', 'username', 'accountNumber']);
+    expect(all[2].key, 'login'); // Cyclos's own entry wins
+    expect(all[0].fromCyclos, isFalse);
+  });
 }
