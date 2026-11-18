@@ -145,7 +145,7 @@ class _SavingsTab extends ConsumerWidget {
             label: const Text('Open a savings account'),
           ),
           const SizedBox(height: 16),
-          ...accounts.when(
+          ...accounts.when<List<Widget>>(
             loading: () => [const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))],
             error: (e, _) => [ErrorRetry(error: e, onRetry: () => ref.invalidate(acaoAccountsProvider))],
             data: (list) => list.isEmpty
@@ -238,7 +238,7 @@ class _LoansTab extends ConsumerWidget {
           const SizedBox(height: 20),
           const Text('My loans', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          ...loans.when(
+          ...loans.when<List<Widget>>(
             loading: () => [const LinearProgressIndicator()],
             error: (e, _) => [ErrorRetry(error: e, onRetry: () => ref.invalidate(acaoLoansProvider))],
             data: (list) => list.isEmpty
@@ -266,7 +266,7 @@ class _LoansTab extends ConsumerWidget {
           const SizedBox(height: 20),
           const Text('Applications', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          ...apps.when(
+          ...apps.when<List<Widget>>(
             loading: () => [const LinearProgressIndicator()],
             error: (e, _) => [ErrorRetry(error: e, onRetry: () => ref.invalidate(acaoApplicationsProvider))],
             data: (list) {
