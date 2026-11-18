@@ -41,7 +41,11 @@ class S {
     'done': {'en': 'Done', 'fr': 'Terminé'},
     'success': {'en': 'Payment sent', 'fr': 'Paiement effectué'},
     'approvePrompt': {'en': 'Approve the MTN prompt on your phone', 'fr': 'Validez la demande MTN sur votre téléphone'},
-    'loansSavings': {'en': 'Loans and savings', 'fr': 'Prêts et épargne'},
+    'loansSavings': {'en': 'Savings & loans', 'fr': 'Épargne et prêts'},
+    'loansSavingsHint': {
+      'en': 'ACAO savings, loan applications and repayments',
+      'fr': 'Épargne ACAO, demandes de prêt et remboursements',
+    },
     'verifyId': {'en': 'Verify your identity', 'fr': 'Vérifiez votre identité'},
     'logout': {'en': 'Sign out', 'fr': 'Se déconnecter'},
     'retry': {'en': 'Try again', 'fr': 'Réessayer'},

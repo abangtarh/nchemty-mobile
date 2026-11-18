@@ -64,7 +64,6 @@ class HomeScreen extends ConsumerWidget {
                     tooltip: 'Menu',
                     onSelected: (v) {
                       if (v == 'kyc') openKycWizard(context, s.t('verifyId'));
-                      if (v == 'services') context.push('/services');
                       if (v == 'verify') context.push('/verify');
                       if (v == 'agents') context.push('/agents');
                       if (v == 'statement') context.push('/statement');
@@ -72,9 +71,7 @@ class HomeScreen extends ConsumerWidget {
                       if (v == 'confidentiality') openLegalPage(context, Env.confidentialityUrl);
                       if (v == 'privacy') openLegalPage(context, Env.privacyUrl);
                       if (v == 'close') openLegalPage(context, Env.accountClosureUrl);
-                      if (v == 'products') {
-                        _hub(context, '/products', 'Loans and savings');
-                      }
+                      if (v == 'products') context.push('/acao');
                       if (v == 'logout') ref.read(authProvider.notifier).logout();
                       if (v == 'lang') {
                         final isEn = ref.read(localeProvider).languageCode == 'en';
@@ -84,7 +81,6 @@ class HomeScreen extends ConsumerWidget {
                       }
                     },
                     itemBuilder: (_) => [
-                      const PopupMenuItem(value: 'services', child: Text('Services')),
                       const PopupMenuItem(value: 'verify', child: Text('Verify a receipt')),
                       PopupMenuItem(value: 'agents', child: Text(s.t('findAgent'))),
                       PopupMenuItem(value: 'statement', child: Text(s.t('statements'))),
@@ -200,6 +196,21 @@ class HomeScreen extends ConsumerWidget {
                   leading: const CircleAvatar(
                     backgroundColor: AppColors.goldLight,
                     foregroundColor: AppColors.greenDark,
+                    child: Icon(Icons.savings_outlined),
+                  ),
+                  title: Text(s.t('loansSavings'),
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text(s.t('loansSavingsHint')),
+                  trailing: const Icon(Icons.chevron_right, color: AppColors.muted),
+                  onTap: () => context.push('/acao'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: AppColors.goldLight,
+                    foregroundColor: AppColors.greenDark,
                     child: Icon(Icons.location_on_outlined),
                   ),
                   title: Text(s.t('findAgent'),
@@ -296,28 +307,24 @@ class _BalanceCard extends StatelessWidget {
       );
 }
 
-/// Top up / Cash out are Cyclos custom operations: use the configured
-/// internal name, else the first operation whose name matches; if none is
-/// found, show all services.
+/// Top up / Cash out are the Payment Hub's Cyclos custom operations
+/// (hubTopup / hubCashout); by name as a fallback.
 Future<void> _openMomo(BuildContext context, WidgetRef ref, {required bool topUp}) async {
   final configured = topUp ? Env.topupOperation : Env.cashoutOperation;
   String norm(String v) => v.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
   final words = topUp ? ['topup', 'fund', 'deposit', 'recharge'] : ['cashout', 'withdraw', 'retrait'];
   try {
     final ops = await ref.read(cyclosOperationsApiProvider).list();
-    OperationDef? match;
-    for (final op in ops) {
+    OperationDef? match =
+        ops.where((op) => op.internalName == configured || op.id == configured).firstOrNull;
+    match ??= ops.where((op) {
       final names = [op.internalName ?? '', op.name, op.label ?? ''].map(norm).join(' ');
-      if (configured.isNotEmpty
-          ? (op.internalName == configured || op.id == configured)
-          : words.any(names.contains)) {
-        match = op;
-        break;
-      }
-    }
+      return words.any(names.contains);
+    }).firstOrNull;
     if (!context.mounted) return;
     if (match == null) {
-      context.push('/services');
+      showApiError(context,
+          ApiException('${topUp ? 'Top up' : 'Cash out'} is not available on your account yet.'));
     } else {
       context.push('/op',
           extra: OperationArgs(match.key,
@@ -328,14 +335,6 @@ Future<void> _openMomo(BuildContext context, WidgetRef ref, {required bool topUp
   }
 }
 
-/// Hub features open only when the hub is enabled for this build.
-void _hub(BuildContext context, String route, String feature) {
-  if (Env.hubEnabled) {
-    context.push(route);
-  } else {
-    showComingSoon(context, feature);
-  }
-}
 
 /// Account switcher on the balance card (white on green).
 class _AccountDropdown extends StatelessWidget {

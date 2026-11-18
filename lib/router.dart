@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'data/cyclos/cyclos_qr_api.dart';
+import 'features/acao/acao_apply_screens.dart';
+import 'features/acao/savings_loans_screen.dart';
 import 'features/agents/find_agent_screen.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/inbox/inbox_screen.dart';
@@ -11,7 +13,6 @@ import 'features/auth/pin_screen.dart';
 import 'features/history/history_screen.dart';
 import 'features/history/transfer_details_screen.dart';
 import 'features/home/home_screen.dart';
-import 'features/loans/products_screen.dart';
 import 'features/operations/operation_screen.dart';
 import 'features/qr/qr_screens.dart';
 import 'features/receipts/verify_receipt_screen.dart';
@@ -57,7 +58,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/transfer',
         builder: (_, s) => TransferScreen(args: s.extra as TransferArgs?),
       ),
-      GoRoute(path: '/products', builder: (_, __) => const ProductsScreen()),
       GoRoute(
         path: '/transfer-details/:key',
         builder: (_, s) => TransferDetailsScreen(transferKey: s.pathParameters['key']!),
@@ -66,10 +66,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/op',
         builder: (_, s) => OperationScreen(args: s.extra! as OperationArgs),
       ),
-      GoRoute(path: '/services', builder: (_, __) => const ServicesScreen()),
       GoRoute(path: '/qr/scan', builder: (_, __) => const ScanToPayScreen()),
       GoRoute(path: '/qr/receive', builder: (_, __) => const ReceiveQrScreen()),
       GoRoute(path: '/agents', builder: (_, __) => const FindAgentScreen()),
+      GoRoute(
+        path: '/acao',
+        builder: (_, s) =>
+            SavingsLoansScreen(initialTab: s.uri.queryParameters['tab'] == 'loans' ? 1 : 0),
+      ),
+      GoRoute(path: '/acao/savings/apply', builder: (_, __) => const SavingsApplyScreen()),
+      GoRoute(path: '/acao/loans/apply', builder: (_, __) => const LoanApplyScreen()),
+      GoRoute(
+        path: '/acao/loans/:id',
+        builder: (_, s) => AcaoLoanDetailScreen(loanId: s.pathParameters['id']!),
+      ),
       GoRoute(path: '/inbox', builder: (_, __) => const InboxScreen()),
       GoRoute(
         path: '/payment-request/:key',

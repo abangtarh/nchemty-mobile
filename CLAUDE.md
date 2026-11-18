@@ -16,10 +16,14 @@ Developer: Abang (Sure Engineering & Technologies). Develops on Windows 11
   in the in-app browser (`features/kyc/kyc_launcher.dart`). No hub involved.
 - **Receipt verification**: public Cyclos custom web service
   `/run/verify-receipt` (`docs/cyclos/`).
-- **Node middleware / Payment Hub `/v1`** (`lib/data/middleware/hub_api.dart`):
-  only loans (LoanCoreLib) and ACAO DailySaver (ACAOCoreLib) remain, behind
-  `HUB_ENABLED`. Contract in `docs/middleware-contract.md` (its MoMo and KYC
-  sections are no longer used by the app).
+- **Savings & loans**: Nchemty's ACAO platform (repo `abangtarh/Acao`,
+  `https://acao.nchemty.com/api`, `--dart-define=ACAO_URL=`). Client in
+  `lib/data/acao/acao_api.dart`; screens in `lib/features/acao/`. The app signs
+  in with the member's live Cyclos session (`POST /auth/cyclos-session`, Acao
+  PR #2) — no second password. Member routes: savings products/accounts/
+  applications/early withdrawal, loan applications/loans/schedule. Loan rate is
+  set by Nchemty (`LOAN_DEFAULT_RATE_PA` on the server), not by the member.
+  The old Payment Hub `/v1` client and the Cyclos "Services" list were removed.
 - **Push notifications**: Firebase project `nchemty-d07fd` (same as the old
   published apps). Options in `lib/core/push/firebase_options.dart`; the app
   registers its FCM token with Cyclos (`/firebase/fcm-tokens`) after sign-in
@@ -45,7 +49,7 @@ Developer: Abang (Sure Engineering & Technologies). Develops on Windows 11
   `POST /{owner}/operations/{op}/run` — a possible no-hub route for
   LoanCoreLib / ACAOCoreLib.
 - Device PINs (`/device-pins`) and FCM tokens (`/firebase/fcm-tokens`) exist.
-- Hub features are behind `--dart-define=HUB_ENABLED=true` (off by default).
+- Top up / Cash out: Cyclos custom operations `hubTopup` / `hubCashout` (defaults).
 
 ## Functional reference: official Cyclos frontend
 Workflows copy the official open-source frontend **cyclosproject/cyclos4-ui
@@ -99,7 +103,7 @@ Still to do, in order:
 4. AndroidManifest: `CAMERA` and `USE_BIOMETRIC` permissions.
 5. iOS `Info.plist`: `NSCameraUsageDescription`, `NSFaceIDUsageDescription`.
 6. `flutter analyze` + `flutter test` clean, then `flutter run` on an Android
-   phone with `--dart-define=CYCLOS_URL=... --dart-define=HUB_URL=...`.
+   phone with `--dart-define=CYCLOS_URL=...`.
 7. Commit `android/` and `ios/` on a branch and open a PR.
 8. Add `codemagic.yaml` for iOS → TestFlight and Android → Play internal track.
 

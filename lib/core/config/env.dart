@@ -1,7 +1,6 @@
 /// Build-time configuration. Pass values with --dart-define, e.g.
 ///   flutter run --dart-define=FLAVOR=dev \
 ///     --dart-define=CYCLOS_URL=https://ebank-test.nchemty.com/api \
-///     --dart-define=HUB_URL=https://brg1-test.nchemty.com/v1
 class Env {
   Env._();
 
@@ -13,10 +12,10 @@ class Env {
     defaultValue: 'https://ebank.nchemty.com/api',
   );
 
-  /// Node middleware / Payment Hub base, ending in /v1.
-  static const hubBaseUrl = String.fromEnvironment(
-    'HUB_URL',
-    defaultValue: 'https://brg1.nchemty.com/v1',
+  /// Nchemty savings & loans platform (ACAO), ending in /api.
+  static const acaoBaseUrl = String.fromEnvironment(
+    'ACAO_URL',
+    defaultValue: 'https://acao.nchemty.com/api',
   );
 
   /// Cyclos channel internal name used for mobile sessions.
@@ -27,17 +26,12 @@ class Env {
   static const mainAccountType =
       String.fromEnvironment('MAIN_ACCOUNT_TYPE', defaultValue: 'member');
 
-  /// Off until the hub's /v1 routes are deployed: loans and savings then
-  /// show "coming soon" instead of failing. (MoMo runs on Cyclos custom
-  /// operations; Verify ID opens the web KYC wizard, see [kycUrl].)
-  /// Turn on with --dart-define=HUB_ENABLED=true.
-  static const hubEnabled =
-      bool.fromEnvironment('HUB_ENABLED', defaultValue: false);
-
   /// Internal names of the Cyclos custom operations behind the Top up and
-  /// Cash out buttons. Empty = find them by name ("top up", "cash out").
-  static const topupOperation = String.fromEnvironment('TOPUP_OPERATION');
-  static const cashoutOperation = String.fromEnvironment('CASHOUT_OPERATION');
+  /// Cash out buttons (the Payment Hub's operations in Cyclos).
+  static const topupOperation =
+      String.fromEnvironment('TOPUP_OPERATION', defaultValue: 'hubTopup');
+  static const cashoutOperation =
+      String.fromEnvironment('CASHOUT_OPERATION', defaultValue: 'hubCashout');
 
   static const _receiptVerifyDefine = String.fromEnvironment('RECEIPT_VERIFY_URL');
 

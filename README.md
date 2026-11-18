@@ -26,7 +26,7 @@ flutter test
 flutter run \
   --dart-define=FLAVOR=dev \
   --dart-define=CYCLOS_URL=https://<your-cyclos-test>/api \
-  --dart-define=HUB_URL=https://<your-hub-test>/v1 \
+  --dart-define=ACAO_URL=https://<your-acao-test>/api \
   --dart-define=MAIN_ACCOUNT_TYPE=<main account type internal name>
 ```
 
