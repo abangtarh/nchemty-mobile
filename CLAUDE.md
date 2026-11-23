@@ -7,15 +7,32 @@ Developer: Abang (Sure Engineering & Technologies). Develops on Windows 11
 ## Architecture (decided: hybrid)
 - **Cyclos REST directly** (`lib/data/cyclos/`): login (`POST /auth/session`,
   `Session-Token` header, `Channel: mobile`), accounts, history, member payments
-  (preview → `POST /self/payments` with `Confirmation-Password` header), and
+  (preview → `POST /self/payments` with `confirmationPassword` header), and
   **native Cyclos QR** via the Tickets API (`cyclos_qr_api.dart`).
-- **Node middleware / Payment Hub `/v1`** (`lib/data/middleware/hub_api.dart`):
-  MTN MoMo top-up/cash-out, loans (LoanCoreLib), ACAO DailySaver (ACAOCoreLib),
-  KYC. Contract in `docs/middleware-contract.md`. These routes are NOT built yet,
-  so those screens error at runtime until the hub exists.
+- **MoMo top-up / cash-out**: Cyclos custom operations run by the app
+  (`cyclos_operations_api.dart`, `operation_screen.dart`). The old hub MoMo
+  screens were removed.
+- **Verify ID**: opens Nchemty's web KYC wizard (`--dart-define=KYC_URL=...`)
+  in the in-app browser (`features/kyc/kyc_launcher.dart`). No hub involved.
+- **Receipt verification**: public Cyclos custom web service
+  `/run/verify-receipt` (`docs/cyclos/`).
+- **Savings & loans**: Nchemty's ACAO platform (repo `abangtarh/Acao`,
+  `https://acao.nchemty.com/api`, `--dart-define=ACAO_URL=`). Client in
+  `lib/data/acao/acao_api.dart`; screens in `lib/features/acao/`. The app signs
+  in with the member's live Cyclos session (`POST /auth/cyclos-session`, Acao
+  PR #2) — no second password. Member routes: savings products/accounts/
+  applications/early withdrawal, loan applications/loans/schedule. Loan rate is
+  set by Nchemty (`LOAN_DEFAULT_RATE_PA` on the server), not by the member.
+  The old Payment Hub `/v1` client and the Cyclos "Services" list were removed.
+- **Push notifications**: Firebase project `nchemty-d07fd` (same as the old
+  published apps). Options in `lib/core/push/firebase_options.dart`; the app
+  registers its FCM token with Cyclos (`/firebase/fcm-tokens`) after sign-in
+  and removes it on sign-out. Cyclos sends the pushes (its Firebase settings
+  must use the same project). In-app: bell + Inbox (`/notifications`,
+  payment requests via `/self/transactions?kinds=paymentRequest`).
 - Cyclos is the single source of truth for balances; the app never computes them.
 - Stack: Riverpod 2.x, go_router 14, dio 5, flutter_secure_storage, local_auth,
-  image_picker, mobile_scanner. EN/FR strings in `lib/core/l10n/strings.dart`.
+  url_launcher, mobile_scanner, pdf, printing. EN/FR strings in `lib/core/l10n/strings.dart`.
 
 ## Confirmed from the instance's openapi.json (Nchemty API 4.16.17)
 - Confirmation credential goes in the header **`confirmationPassword`** (not
@@ -32,7 +49,7 @@ Developer: Abang (Sure Engineering & Technologies). Develops on Windows 11
   `POST /{owner}/operations/{op}/run` — a possible no-hub route for
   LoanCoreLib / ACAOCoreLib.
 - Device PINs (`/device-pins`) and FCM tokens (`/firebase/fcm-tokens`) exist.
-- Hub features are behind `--dart-define=HUB_ENABLED=true` (off by default).
+- Top up / Cash out: Cyclos custom operations `hubTopup` / `hubCashout` (defaults).
 
 ## Functional reference: official Cyclos frontend
 Workflows copy the official open-source frontend **cyclosproject/cyclos4-ui
@@ -44,6 +61,10 @@ Learned so far:
   `type.from.id == account.type.id` → `data-for-perform?to=&type=` for rules
   (fixedAmount, maxInstallments, allowsRecurringPayments,
   descriptionAvailability) → preview → perform with `preview.payment`.
+- PRIVACY DECISION (Abang): no search or listing of members by name anywhere
+  in the app. The payee is found only by exact phone / e-mail / login name
+  (`<principalType>:<value>`, then `*:<value>`); the name is shown only to
+  confirm the recipient after an exact match.
 - Purely numeric identifiers must be sent as `'<digits>` (escapeNumeric),
   otherwise Cyclos treats them as internal ids.
 - Scanned QR values identify the payee as `*:<value>` (any principal type,
@@ -60,8 +81,13 @@ Learned so far:
 - Store listing: existing app "Nchemty", Apple ID 6757865496, SKU 015012026, live
   version 1.0, published under Sure Engineering. App ID: `com.nchemty.ebank` on
   both stores (verify against App Store Connect / Play Console before release).
-- pubspec version 1.1.0+2; Android versionCode must exceed the live one (unknown).
-- MoMo cash-out fee rules live in the hub: 35 XAF flat under 5 000 XAF; from
+- Store identity CONFIRMED (Play Console + App Store Connect): `com.nchemty.ebank`
+  on both stores. Live: Play release "1.0"; App Store version 1.0 whose build
+  carries CFBundleShortVersionString 2.15.1 (build 1, old Cyclos Mobile).
+- pubspec version 2.16.0+300000: 2.16.0 so iOS is above the uploaded 2.15.1;
+  build number 300000 so the Android versionCode is above the old Cordova one.
+  Raise the +build number on every store upload.
+- MoMo cash-out fee rules live in the Cyclos operation scripts (formerly hub): 35 XAF flat under 5 000 XAF; from
   5 000 XAF, ceiling(0.7% + 4), min 39 XAF.
 
 ## Local setup status (Windows)
@@ -77,7 +103,7 @@ Still to do, in order:
 4. AndroidManifest: `CAMERA` and `USE_BIOMETRIC` permissions.
 5. iOS `Info.plist`: `NSCameraUsageDescription`, `NSFaceIDUsageDescription`.
 6. `flutter analyze` + `flutter test` clean, then `flutter run` on an Android
-   phone with `--dart-define=CYCLOS_URL=... --dart-define=HUB_URL=...`.
+   phone with `--dart-define=CYCLOS_URL=...`.
 7. Commit `android/` and `ios/` on a branch and open a PR.
 8. Add `codemagic.yaml` for iOS → TestFlight and Android → Play internal track.
 

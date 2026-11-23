@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/config/env.dart';
 import 'core/l10n/strings.dart';
+import 'core/push/push_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/auth_controller.dart';
+import 'data/cyclos/cyclos_inbox_api.dart';
 import 'router.dart';
 
 class NchemtyApp extends ConsumerStatefulWidget {
@@ -22,18 +24,48 @@ class _NchemtyAppState extends ConsumerState<NchemtyApp>
     with WidgetsBindingObserver {
   Timer? _idle;
   DateTime? _backgroundedAt;
+  final _messenger = GlobalKey<ScaffoldMessengerState>();
+  final _subs = <StreamSubscription<Object?>>[];
+  bool _openInbox = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _resetIdle();
+    final push = ref.read(pushServiceProvider);
+    // A push arrived while the app is open: refresh the bell, show a line.
+    _subs.add(push.onForeground.listen((m) {
+      ref.invalidate(inboxBadgeProvider);
+      final n = m.notification;
+      if (n == null) return;
+      _messenger.currentState?.showSnackBar(SnackBar(
+        content: Text([n.title, n.body].whereType<String>().join('\n')),
+        action: SnackBarAction(label: 'Open', onPressed: _goInbox),
+      ));
+    }));
+    // The member tapped a notification: open the inbox (after unlocking).
+    _subs.add(push.onOpened.listen((_) => _goInbox()));
+    push.initialMessage().then((m) {
+      if (m != null) _goInbox();
+    });
+  }
+
+  void _goInbox() {
+    if (ref.read(authProvider).status == AuthStatus.authenticated) {
+      ref.read(routerProvider).push('/inbox');
+    } else {
+      _openInbox = true; // after PIN / sign-in
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _idle?.cancel();
+    for (final s in _subs) {
+      s.cancel();
+    }
     super.dispose();
   }
 
@@ -59,6 +91,18 @@ class _NchemtyAppState extends ConsumerState<NchemtyApp>
 
   @override
   Widget build(BuildContext context) {
+    // Each time the member gets in (password, PIN or fingerprint): register
+    // this phone for push, and open the inbox if a notification was tapped.
+    ref.listen(authProvider, (prev, next) {
+      if (next.status == AuthStatus.authenticated &&
+          prev?.status != AuthStatus.authenticated) {
+        ref.read(pushServiceProvider).registerForMember();
+        if (_openInbox) {
+          _openInbox = false;
+          Future.microtask(() => ref.read(routerProvider).push('/inbox'));
+        }
+      }
+    });
     final router = ref.watch(routerProvider);
     final locale = ref.watch(localeProvider);
     return Listener(
@@ -66,6 +110,7 @@ class _NchemtyAppState extends ConsumerState<NchemtyApp>
       onPointerDown: (_) => _resetIdle(),
       child: MaterialApp.router(
         title: 'Nchemty',
+        scaffoldMessengerKey: _messenger,
         debugShowCheckedModeBanner: false,
         theme: buildTheme(),
         routerConfig: router,

@@ -103,5 +103,3 @@ Dio _build(String baseUrl, SessionHolder session, {required bool forCyclos}) {
 final cyclosDioProvider = Provider<Dio>((ref) =>
     _build(Env.cyclosBaseUrl, ref.watch(sessionHolderProvider), forCyclos: true));
 
-final hubDioProvider = Provider<Dio>((ref) =>
-    _build(Env.hubBaseUrl, ref.watch(sessionHolderProvider), forCyclos: false));

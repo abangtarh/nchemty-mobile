@@ -40,13 +40,44 @@ class S {
     'txPin': {'en': 'Transaction PIN', 'fr': 'Code de transaction'},
     'done': {'en': 'Done', 'fr': 'Terminé'},
     'success': {'en': 'Payment sent', 'fr': 'Paiement effectué'},
-    'momoNumber': {'en': 'MoMo number', 'fr': 'Numéro MoMo'},
-    'youReceive': {'en': 'You receive on MoMo', 'fr': 'Vous recevez sur MoMo'},
     'approvePrompt': {'en': 'Approve the MTN prompt on your phone', 'fr': 'Validez la demande MTN sur votre téléphone'},
-    'loansSavings': {'en': 'Loans and savings', 'fr': 'Prêts et épargne'},
+    'loansSavings': {'en': 'Savings & loans', 'fr': 'Épargne et prêts'},
+    'loansSavingsHint': {
+      'en': 'ACAO savings, loan applications and repayments',
+      'fr': 'Épargne ACAO, demandes de prêt et remboursements',
+    },
     'verifyId': {'en': 'Verify your identity', 'fr': 'Vérifiez votre identité'},
     'logout': {'en': 'Sign out', 'fr': 'Se déconnecter'},
     'retry': {'en': 'Try again', 'fr': 'Réessayer'},
+    'legalConsent': {
+      'en': 'By signing in, you accept the terms and conditions, the confidentiality agreement and the privacy notice.',
+      'fr': 'En vous connectant, vous acceptez les conditions générales, l\'accord de confidentialité et la notice de confidentialité.',
+    },
+    'termsLink': {'en': 'Terms and conditions', 'fr': 'Conditions générales'},
+    'confidentialityLink': {'en': 'Confidentiality agreement', 'fr': 'Accord de confidentialité'},
+    'privacyLink': {'en': 'Privacy notice', 'fr': 'Notice de confidentialité'},
+    'closeAccountLink': {'en': 'Close my account', 'fr': 'Clôturer mon compte'},
+    'inbox': {'en': 'Inbox', 'fr': 'Boîte de réception'},
+    'requestsTab': {'en': 'Requests', 'fr': 'Demandes'},
+    'notificationsTab': {'en': 'Notifications', 'fr': 'Notifications'},
+    'oneRequestWaiting': {
+      'en': '1 payment request is waiting for you',
+      'fr': '1 demande de paiement vous attend',
+    },
+    'requestsWaiting': {
+      'en': '{n} payment requests are waiting for you',
+      'fr': '{n} demandes de paiement vous attendent',
+    },
+    'betweenAccounts': {'en': 'Transfer between my accounts', 'fr': 'Virement entre mes comptes'},
+    'statement': {'en': 'Statement', 'fr': 'Relevé'},
+    'statements': {'en': 'Account statements', 'fr': 'Relevés de compte'},
+    'findAgent': {'en': 'Find an agent', 'fr': 'Trouver un agent'},
+    'findAgentHint': {
+      'en': 'Nearest branch or agent, with directions',
+      'fr': 'Agence ou agent le plus proche, avec itinéraire',
+    },
+    'allServices': {'en': 'All', 'fr': 'Tous'},
+    'legalMenu': {'en': 'Terms & privacy', 'fr': 'Conditions et confidentialité'},
   };
 
   String t(String key) => _t[key]?[lang] ?? _t[key]?['en'] ?? key;

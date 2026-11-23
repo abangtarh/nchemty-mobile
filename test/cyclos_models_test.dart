@@ -124,4 +124,87 @@ void main() {
     ));
     expect(e.isWrongConfirmation, isTrue);
   });
+
+  test('history entry key escapes numeric transaction numbers', () {
+    HistoryEntry e(String? n) => HistoryEntry.fromJson({
+          'id': 'abc',
+          'amount': '10',
+          'date': '2026-10-24T10:00:00Z',
+          if (n != null) 'transactionNumber': n,
+        });
+    expect(e('12345').key, "'12345");
+    expect(e('TX-9').key, 'TX-9');
+    expect(e(null).key, 'abc');
+  });
+
+  test('transfer details read parties, fees and statuses', () {
+    final t = TransferDetails.fromJson({
+      'id': '1',
+      'date': '2026-10-24T10:00:00Z',
+      'amount': '-5000',
+      'transactionNumber': 'TX-1',
+      'from': {'user': {'display': 'Abang'}, 'type': {'name': 'Current'}},
+      'to': {'type': {'name': 'MoMo Transactions'}},
+      'type': {'name': 'Cash out'},
+      'children': [
+        {'amount': '39', 'type': {'name': 'Cash-out fee'}}
+      ],
+      'statuses': {'flow1': {'name': 'Completed'}},
+    });
+    expect(t.fromName, 'Abang');
+    expect(t.toName, 'MoMo Transactions');
+    expect(t.fees.single.$2, 39);
+    expect(t.statuses, ['Completed']);
+  });
+
+  test('payee identification methods from data-for-perform', () {
+    final d = PaymentData.fromJson({
+      'accounts': [],
+      'allowAutocomplete': true,
+      'defaultIdMethod': 'principalType',
+      'defaultPrincipalType': 'mobilePhone',
+      'principalTypes': [
+        {'internalName': 'username', 'name': 'Username', 'kind': 'username'},
+        {'internalName': 'email', 'name': 'E-mail', 'kind': 'email'},
+        {'internalName': 'mobilePhone', 'name': 'Mobile phone', 'kind': 'mobilePhone', 'example': '677 12 34 56'},
+        {'internalName': 'qr', 'name': 'QR code', 'kind': 'token'},
+      ],
+    });
+    expect(d.principalTypes.map((p) => p.key), ['username', 'email', 'mobilePhone']);
+    expect(d.defaultPrincipalType, 'mobilePhone');
+    final phone = d.principalTypes.last;
+    expect(phone.locator(' 677 12-34-56 '), 'mobilePhone:677123456');
+    expect(d.principalTypes[1].locator('Jane@Mail.com'), 'email:jane@mail.com');
+  });
+
+  test('phone, e-mail and login name are always offered', () {
+    final cyclosOnly = [
+      const PrincipalTypeInput(key: 'login', name: 'Login name', kind: 'username'),
+      const PrincipalTypeInput(key: 'acc', name: 'Account number', kind: 'accountNumber'),
+    ];
+    final all = PrincipalTypeInput.withStandard(cyclosOnly);
+    expect(all.map((t) => t.kind), ['username', 'mobilePhone', 'email']);
+    expect(all.map((t) => t.name), ['Login name', 'Phone', 'E-mail']);
+    expect(all[0].key, 'login'); // Cyclos's internal name is used
+    expect(all[1].fromCyclos, isFalse);
+  });
+
+  test('phone spellings tried for Cameroon numbers', () {
+    const phone = PrincipalTypeInput(key: 'mobilePhone', name: 'Phone', kind: 'mobilePhone');
+    expect(phone.candidates('677 12 34 56'), ['677123456', '+237677123456', '237677123456']);
+    expect(phone.candidates('+237 677-12-34-56'), ['+237677123456', '677123456', '237677123456']);
+    expect(phone.candidates('00237677123456'), ['+237677123456', '677123456', '237677123456']);
+  });
+
+  test('own-account transfer type keeps from/to account names', () {
+    final t = PaymentType.fromJson({
+      'id': '-9001',
+      'name': 'Member to savings',
+      'from': {'id': '-1', 'name': 'Member account'},
+      'to': {'id': '-2', 'name': 'Savings Account'},
+    });
+    expect(t.fromName, 'Member account');
+    expect(t.toName, 'Savings Account');
+    expect(t.toId, '-2');
+  });
 }

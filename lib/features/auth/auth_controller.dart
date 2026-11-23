@@ -3,6 +3,7 @@ import 'package:local_auth/local_auth.dart';
 
 import '../../core/network/api_exception.dart';
 import '../../core/network/dio_factory.dart';
+import '../../core/push/push_service.dart';
 import '../../core/storage/secure_store.dart';
 import '../../data/cyclos/cyclos_api.dart';
 import '../../data/models/models.dart';
@@ -34,20 +35,28 @@ class AuthState {
       AuthState(status ?? this.status, user: user ?? this.user, error: error);
 }
 
-/// Flow:
-///  1. Password login -> Cyclos session token (kept in secure storage).
-///  2. Member creates a local PIN; biometrics optional.
-///  3. Later launches: PIN/biometrics unlock the stored token, then
-///     GET /auth confirms Cyclos still accepts it. Expired -> password again.
-///
-/// TODO(cyclos): replace the local PIN with Cyclos device PINs once the
-/// feature is confirmed on the instance, so Cyclos also verifies the PIN.
+/// Flow ("remember me"):
+///  1. Password login -> Cyclos session token. The username is remembered.
+///  2. Member creates a PIN. It is registered with Cyclos as a device PIN
+///     (POST /device-pins), so Cyclos itself checks it, and kept as a local
+///     hash for a quick offline check.
+///  3. Later launches: PIN (or biometrics) -> reuse the stored session if
+///     Cyclos still accepts it, otherwise open a NEW session with the device
+///     PIN. The password is only needed again if Cyclos removes the PIN
+///     (too many wrong tries) or the member signs out.
+///  If device PINs are off for the channel, step 3 falls back to the stored
+///  session only, which ends with Cyclos's session timeout.
 class AuthController extends Notifier<AuthState> {
   late final SecureStore _store = ref.read(secureStoreProvider);
   late final SessionHolder _session = ref.read(sessionHolderProvider);
   late final CyclosApi _api = ref.read(cyclosApiProvider);
   final _localAuth = LocalAuthentication();
   int _failedPins = 0;
+
+  /// From the password login, to register the device PIN (6-minute token;
+  /// the password is the fallback). Memory only, cleared after use.
+  String? _pinCreationToken;
+  String? _password;
 
   @override
   AuthState build() {
@@ -57,15 +66,16 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> _restore() async {
+    final hasPin = await _store.hasPin();
+    final devicePin = await _store.readDevicePin();
     final token = await _store.readSession();
-    if (token == null) {
-      state = const AuthState(AuthStatus.loggedOut);
-    } else if (!await _store.hasPin()) {
-      // Session saved but PIN never set: start clean.
+    final name = await _store.readUserName();
+    final user = name == null ? null : CyclosUser(id: '', display: name);
+    if (hasPin && (devicePin != null || token != null)) {
+      state = AuthState(AuthStatus.locked, user: user);
+    } else {
       await _store.clearSession();
       state = const AuthState(AuthStatus.loggedOut);
-    } else {
-      state = const AuthState(AuthStatus.locked);
     }
   }
 
@@ -75,7 +85,20 @@ class AuthController extends Notifier<AuthState> {
       final result = await _api.login(username.trim(), password);
       _session.token = result.token;
       await _store.writeSession(result.token);
+      await _store.writeLastUsername(username.trim());
+      await _store.writeUserName(result.user.display);
       _failedPins = 0;
+      // Keep an existing PIN. Only an install from before device PINs (local
+      // PIN, never tried with Cyclos) is asked to set it once more, so it
+      // can be registered. If Cyclos refused before, don't ask again.
+      final hasPin = await _store.hasPin();
+      if (hasPin &&
+          await _store.readDevicePin() == null &&
+          await _store.readDevicePinRefused() == null) {
+        await _store.clearPin();
+      }
+      _pinCreationToken = result.pinCreationToken;
+      _password = password;
       state = AuthState(
         await _store.hasPin() ? AuthStatus.authenticated : AuthStatus.needsPin,
         user: result.user,
@@ -88,9 +111,61 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
-  Future<void> createPin(String pin) async {
+  /// Registers the PIN with Cyclos and locally.
+  /// * `rejected`: Cyclos refused this PIN value (too simple, wrong length);
+  ///   nothing is saved, the member picks another.
+  /// * `warning`: the PIN works on this phone but Cyclos would not register
+  ///   it (device PINs off for the channel...). Saved; the screen shows the
+  ///   reason, then calls [finishPinSetup].
+  Future<({String? rejected, String? warning})> createPin(String pin,
+      {required bool biometrics}) async {
+    String? warning;
+    Future<({String principal, String salt})> register({required bool withToken}) =>
+        _api.createDevicePin(
+          name: 'Nchemty app',
+          pin: pin,
+          pinCreationToken: withToken ? _pinCreationToken : null,
+          currentPassword: withToken ? null : _password,
+        );
+    try {
+      late ({String principal, String salt}) created;
+      try {
+        created = await register(withToken: _pinCreationToken != null);
+      } on ApiException catch (e) {
+        // The 6-minute token expired: confirm with the password instead.
+        if (_pinCreationToken == null || _password == null || e.statusCode == 422) rethrow;
+        created = await register(withToken: false);
+      }
+      await _store.writeDevicePin(created.principal, created.salt);
+      await _store.writeDevicePinRefused(null);
+    } on ApiException catch (e) {
+      // PIN rules (too simple, wrong length): keep the token and password
+      // in memory so the member's next choice can still be registered.
+      if (e.statusCode == 422) return (rejected: e.message, warning: null);
+      // Device PINs not enabled for this channel (or offline): keep a
+      // local PIN; unlocking then works while the Cyclos session lasts.
+      await _store.clearDevicePin();
+      final reason = '${e.message}${e.code != null ? ' (${e.code})' : ''}';
+      await _store.writeDevicePinRefused(reason);
+      warning = reason;
+    }
+    _pinCreationToken = null;
+    _password = null;
     await _store.setPin(pin);
-    state = state.copyWith(status: AuthStatus.authenticated);
+    await _store.setBiometrics(biometrics);
+    await _store.writeBioPin(biometrics ? pin : null);
+    if (warning == null) finishPinSetup();
+    return (rejected: null, warning: warning);
+  }
+
+  void finishPinSetup() => state = state.copyWith(status: AuthStatus.authenticated);
+
+  /// "Use password" on the unlock screen: sign in with the password this
+  /// time, but keep the PIN and fingerprint set up on this phone.
+  Future<void> usePassword() async {
+    _session.token = null;
+    await _store.clearSession();
+    state = AuthState(AuthStatus.loggedOut, user: state.user);
   }
 
   Future<bool> unlockWithPin(String pin) async {
@@ -105,7 +180,16 @@ class AuthController extends Notifier<AuthState> {
       }
       return false;
     }
-    return _resumeSession();
+    return _resumeSession(pin);
+  }
+
+  /// Whether this phone has fingerprint / Face ID set up.
+  Future<bool> biometricsAvailable() async {
+    try {
+      return await _localAuth.canCheckBiometrics && await _localAuth.isDeviceSupported();
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<bool> canUseBiometrics() async {
@@ -124,32 +208,64 @@ class AuthController extends Notifier<AuthState> {
         localizedReason: 'Unlock Nchemty',
         options: const AuthenticationOptions(biometricOnly: true),
       );
-      return ok ? await _resumeSession() : false;
+      return ok ? await _resumeSession(await _store.readBioPin()) : false;
     } catch (_) {
       return false;
     }
   }
 
-  Future<void> setBiometrics(bool on) => _store.setBiometrics(on);
-
-  Future<bool> _resumeSession() async {
+  /// 1. Reuse the stored session while Cyclos accepts it.
+  /// 2. Otherwise open a new session with the Cyclos device PIN.
+  /// 3. Only if that is impossible, ask for the password.
+  Future<bool> _resumeSession(String? pin) async {
     final token = await _store.readSession();
-    if (token == null) {
-      state = const AuthState(AuthStatus.loggedOut);
-      return false;
-    }
-    _session.token = token;
-    try {
-      final user = await _api.currentUser();
-      _failedPins = 0;
-      state = AuthState(AuthStatus.authenticated, user: user);
-      return true;
-    } on ApiException catch (e) {
-      if (e.isUnauthorized) {
+    if (token != null) {
+      _session.token = token;
+      try {
+        final user = await _api.currentUser();
+        _failedPins = 0;
+        state = AuthState(AuthStatus.authenticated, user: user);
+        return true;
+      } on ApiException catch (e) {
+        if (!e.isUnauthorized) {
+          state = state.copyWith(error: e.message);
+          return false;
+        }
         await _store.clearSession();
         _session.token = null;
-        state = const AuthState(AuthStatus.loggedOut,
-            error: 'Your session has ended. Please sign in again.');
+      }
+    }
+
+    final devicePin = await _store.readDevicePin();
+    if (devicePin == null) {
+      state = const AuthState(AuthStatus.loggedOut,
+          error: 'Your session has ended. Please sign in again.');
+      return false;
+    }
+    if (pin == null) {
+      // Biometrics without a stored PIN: type the PIN once.
+      state = AuthState(AuthStatus.locked,
+          user: state.user, error: 'Enter your PIN to continue.');
+      return false;
+    }
+    try {
+      final r = await _api.loginWithDevicePin(devicePin.principal, devicePin.salt, pin);
+      _session.token = r.token;
+      await _store.writeSession(r.token);
+      await _store.writeUserName(r.user.display);
+      _failedPins = 0;
+      state = AuthState(AuthStatus.authenticated, user: r.user);
+      return true;
+    } on ApiException catch (e) {
+      if (e.code == 'devicePinRemoved' || e.statusCode == 401 || e.statusCode == 403) {
+        // Cyclos no longer accepts this PIN (removed, blocked or reset).
+        await _store.clearSession();
+        await _store.clearPin();
+        state = AuthState(AuthStatus.loggedOut,
+            error: e.code == 'devicePinRemoved'
+                ? 'Your PIN was removed after too many attempts. Sign in with your password.'
+                : 'Please sign in with your password to set up your PIN again. '
+                    '(Cyclos: ${e.message}${e.code != null ? ', ${e.code}' : ''})');
       } else {
         state = state.copyWith(error: e.message);
       }
@@ -164,7 +280,11 @@ class AuthController extends Notifier<AuthState> {
     state = AuthState(AuthStatus.locked, user: state.user);
   }
 
+  /// Sign out: ends the session and forgets the PIN on this phone, so the
+  /// next start asks for the password (the username stays filled in).
   Future<void> logout() async {
+    // Stop push notifications to this phone while the session still works.
+    if (_session.token != null) await ref.read(pushServiceProvider).unregister();
     try {
       if (_session.token != null) await _api.logout();
     } catch (_) {
@@ -172,6 +292,7 @@ class AuthController extends Notifier<AuthState> {
     }
     _session.token = null;
     await _store.clearSession();
+    await _store.clearPin();
     state = const AuthState(AuthStatus.loggedOut);
   }
 
@@ -181,10 +302,16 @@ class AuthController extends Notifier<AuthState> {
     await _store.wipe();
   }
 
-  void _onUnauthorized() {
-    if (state.status == AuthStatus.authenticated) {
-      _session.token = null;
-      _store.clearSession();
+  /// The session expired while the app was open: with a device PIN the
+  /// member just re-enters the PIN; without one, the password.
+  Future<void> _onUnauthorized() async {
+    if (state.status != AuthStatus.authenticated) return;
+    _session.token = null;
+    await _store.clearSession();
+    if (await _store.readDevicePin() != null && await _store.hasPin()) {
+      state = AuthState(AuthStatus.locked,
+          user: state.user, error: 'Your session timed out. Enter your PIN.');
+    } else {
       state = const AuthState(AuthStatus.loggedOut,
           error: 'Your session has ended. Please sign in again.');
     }
