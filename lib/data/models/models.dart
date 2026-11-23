@@ -261,10 +261,15 @@ class HistoryPage {
 /// As in the official Cyclos frontend, the id is sent as `type` and
 /// types are filtered by `from.id` == the chosen account's type id.
 class PaymentType {
-  PaymentType({required this.id, required this.name, required this.fromId, this.toId});
+  PaymentType(
+      {required this.id, required this.name, required this.fromId, this.toId, this.fromName, this.toName});
   final String id;
   final String name;
   final String? fromId;
+
+  /// Account type names, e.g. "Member account" → "Savings Account".
+  final String? fromName;
+  final String? toName;
 
   /// Destination account type id (used when receiving: tickets).
   final String? toId;
@@ -277,6 +282,8 @@ class PaymentType {
       name: (j['name'] ?? j['internalName'] ?? '').toString(),
       fromId: from?['id']?.toString(),
       toId: to?['id']?.toString(),
+      fromName: from?['name']?.toString(),
+      toName: to?['name']?.toString(),
     );
   }
 }

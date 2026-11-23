@@ -68,6 +68,7 @@ class S {
       'en': '{n} payment requests are waiting for you',
       'fr': '{n} demandes de paiement vous attendent',
     },
+    'betweenAccounts': {'en': 'Transfer between my accounts', 'fr': 'Virement entre mes comptes'},
     'statement': {'en': 'Statement', 'fr': 'Relevé'},
     'statements': {'en': 'Account statements', 'fr': 'Relevés de compte'},
     'findAgent': {'en': 'Find an agent', 'fr': 'Trouver un agent'},

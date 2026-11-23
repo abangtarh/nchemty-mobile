@@ -14,6 +14,7 @@ import '../auth/auth_controller.dart';
 import '../common/legal_links.dart';
 import '../common/widgets.dart';
 import '../kyc/kyc_launcher.dart';
+import '../transfer/transfer_screen.dart';
 import '../operations/operation_screen.dart';
 import 'home_providers.dart';
 
@@ -67,6 +68,9 @@ class HomeScreen extends ConsumerWidget {
                       if (v == 'verify') context.push('/verify');
                       if (v == 'agents') context.push('/agents');
                       if (v == 'statement') context.push('/statement');
+                      if (v == 'self') {
+                        context.push('/transfer', extra: const TransferArgs(toSelf: true));
+                      }
                       if (v == 'terms') openLegalPage(context, Env.termsUrl);
                       if (v == 'confidentiality') openLegalPage(context, Env.confidentialityUrl);
                       if (v == 'privacy') openLegalPage(context, Env.privacyUrl);
@@ -83,6 +87,7 @@ class HomeScreen extends ConsumerWidget {
                     itemBuilder: (_) => [
                       const PopupMenuItem(value: 'verify', child: Text('Verify a receipt')),
                       PopupMenuItem(value: 'agents', child: Text(s.t('findAgent'))),
+                      PopupMenuItem(value: 'self', child: Text(s.t('betweenAccounts'))),
                       PopupMenuItem(value: 'statement', child: Text(s.t('statements'))),
                       PopupMenuItem(value: 'products', child: Text(s.t('loansSavings'))),
                       PopupMenuItem(value: 'kyc', child: Text(s.t('verifyId'))),

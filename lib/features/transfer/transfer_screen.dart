@@ -15,8 +15,11 @@ import '../home/home_providers.dart';
 
 /// What the Send screen can start with (e.g. from a scanned QR).
 class TransferArgs {
-  const TransferArgs({this.payee, this.amount, this.description});
+  const TransferArgs({this.payee, this.amount, this.description, this.toSelf = false});
   final CyclosUser? payee;
+
+  /// Open in "Between my accounts" mode.
+  final bool toSelf;
   final num? amount;
   final String? description;
 }
@@ -55,6 +58,11 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
 
   List<Account> _accounts = const [];
   PaymentData? _start; // data-for-perform before a payee: identification methods
+
+  /// Transfers between the member's own accounts (data-for-perform?to=self):
+  /// only the types Cyclos enables, e.g. Member account → Savings account.
+  List<PaymentType> _selfTypes = const [];
+  bool _toSelf = false;
   Account? _from;
   CyclosUser? _payee;
   String? _payeeLocator; // what is sent as `to` / `subject`
@@ -121,9 +129,45 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
           _from = d.accounts.firstWhere((a) => a.id == preferred?.id,
               orElse: () => d.accounts.first);
         });
+        // Own-account transfers enabled for this member (none: mode hidden).
+        try {
+          final self = await _api.paymentData(to: 'self');
+          if (mounted) setState(() => _selfTypes = self.paymentTypes);
+        } on ApiException catch (_) {
+          // No permission for payments to self.
+        }
         final p = widget.args?.payee;
-        if (p != null) await _choosePayee(p, p.id);
+        if (p != null) {
+          await _choosePayee(p, p.id);
+        } else if (widget.args?.toSelf == true && _selfTypes.isNotEmpty) {
+          await _setMode(true);
+        }
       });
+
+  /// Switches between paying a member and moving money between own accounts.
+  Future<void> _setMode(bool toSelf) async {
+    setState(() {
+      _toSelf = toSelf;
+      _payee = null;
+      _payeeLocator = toSelf ? 'self' : null;
+      _allTypes = toSelf ? _selfTypes : const [];
+      _type = null;
+      _rules = null;
+      _preview = null;
+      _error = null;
+    });
+    if (toSelf) {
+      // Start from an account that can send to another of the member's accounts.
+      final from = _from;
+      if (from != null && !_selfTypes.any((t) => t.fromId == null || t.fromId == from.typeKey)) {
+        final usable = _accounts
+            .where((a) => _selfTypes.any((t) => t.fromId == a.typeKey))
+            .firstOrNull;
+        if (usable != null) setState(() => _from = usable);
+      }
+      await _run(_pickFirstType);
+    }
+  }
 
   /// Finds the payee by phone / e-mail / login name:
   ///  1. the exact identification method (`mobilePhone:677…`), when Cyclos
@@ -211,6 +255,10 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
         _type = null;
         _rules = null;
       });
+      if (_toSelf) {
+        throw ApiException(
+            'No transfer to your other accounts is enabled from this account. Choose another account.');
+      }
       if (_payee != null && _allTypes.isNotEmpty) {
         throw ApiException('This account cannot pay this member. Choose another account.');
       }
@@ -320,7 +368,7 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
       builder: (c) => AlertDialog(
         icon: const Icon(Icons.check_circle, color: AppColors.credit, size: 48),
         title: Text(immediate ? s.t('success') : 'Payment scheduled'),
-        content: Text('${Money.xaf(p.amount)} to ${p.recipient}\nReference: $tx'),
+        content: Text('${Money.xaf(p.amount)} to $_recipient\nReference: $tx'),
         actions: [
           if (immediate)
             TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('View receipt')),
@@ -336,6 +384,11 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
       context.pop();
     }
   }
+
+  /// Who/where the money goes, for the review and the success message.
+  String get _recipient => _toSelf
+      ? 'your ${_type?.toName ?? 'other account'}'
+      : (_preview?.recipient.isNotEmpty == true ? _preview!.recipient : _payee?.display ?? '');
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
@@ -385,13 +438,47 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                             ? null
                             : (a) {
                                 setState(() => _from = a);
-                                if (_payee != null) _run(_pickFirstType);
+                                if (_payee != null || _toSelf) _run(_pickFirstType);
                               },
                       ),
                     const SizedBox(height: 16),
 
-                    // 2. Payee
-                    if (_payee == null)
+                    // Mode: to a member / between my accounts (if Cyclos enables it)
+                    if (_selfTypes.isNotEmpty && widget.args?.payee == null) ...[
+                      SegmentedButton<bool>(
+                        segments: const [
+                          ButtonSegment(
+                              value: false, icon: Icon(Icons.person_outline), label: Text('To a member')),
+                          ButtonSegment(
+                              value: true,
+                              icon: Icon(Icons.swap_horiz),
+                              label: Text('My accounts')),
+                        ],
+                        selected: {_toSelf},
+                        onSelectionChanged: locked ? null : (v) => _setMode(v.first),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // 2. Payee (or, between own accounts, the destination account)
+                    if (_toSelf)
+                      DropdownButtonFormField<PaymentType>(
+                        key: ValueKey('self-${_from?.id}'),
+                        initialValue: _types.contains(_type) ? _type : null,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'To account'),
+                        items: [
+                          for (final t in _types)
+                            DropdownMenuItem(
+                              value: t,
+                              child: Text(
+                                  t.toName == null ? t.name : '${t.toName}  ·  ${t.name}',
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                        ],
+                        onChanged: locked ? null : (t) => _run(() => _chooseType(t!)),
+                      )
+                    else if (_payee == null)
                       _PayeeSearch(
                         enabled: !locked,
                         principalTypes:
@@ -429,8 +516,8 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                         ),
                       ),
 
-                    // 3. Payment type
-                    if (_types.length > 1) ...[
+                    // 3. Payment type (between own accounts it is the "To account")
+                    if (!_toSelf && _types.length > 1) ...[
                       const SizedBox(height: 16),
                       DropdownButtonFormField<PaymentType>(
                         key: ValueKey(_from?.id),
@@ -443,7 +530,7 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                         ],
                         onChanged: locked ? null : (t) => _run(() => _chooseType(t!)),
                       ),
-                    ] else if (_type != null) ...[
+                    ] else if (!_toSelf && _type != null) ...[
                       const SizedBox(height: 8),
                       Text('Transfer type: ${_type!.name}',
                           style: const TextStyle(color: AppColors.muted)),
@@ -578,7 +665,7 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                           child: Column(children: [
-                            SummaryRow('To', p.recipient),
+                            SummaryRow('To', _toSelf ? (_type?.toName ?? 'My account') : p.recipient),
                             if (p.paymentTypeName != null) SummaryRow('Type', p.paymentTypeName!),
                             SummaryRow(s.t('amount'), Money.xaf(p.amount)),
                             SummaryRow(s.t('fee'), Money.xaf(p.fees)),

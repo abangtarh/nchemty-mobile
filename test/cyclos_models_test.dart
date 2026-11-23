@@ -195,4 +195,16 @@ void main() {
     expect(phone.candidates('+237 677-12-34-56'), ['+237677123456', '677123456', '237677123456']);
     expect(phone.candidates('00237677123456'), ['+237677123456', '677123456', '237677123456']);
   });
+
+  test('own-account transfer type keeps from/to account names', () {
+    final t = PaymentType.fromJson({
+      'id': '-9001',
+      'name': 'Member to savings',
+      'from': {'id': '-1', 'name': 'Member account'},
+      'to': {'id': '-2', 'name': 'Savings Account'},
+    });
+    expect(t.fromName, 'Member account');
+    expect(t.toName, 'Savings Account');
+    expect(t.toId, '-2');
+  });
 }
