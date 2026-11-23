@@ -279,6 +279,18 @@ class AcaoApi {
           data: {'sessionToken': cyclos});
       return _token = '${res.data!['token']}';
     } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      if (code == 404 || code == 405) {
+        // The server does not have the mobile sign-in endpoint yet.
+        throw ApiException(
+            'Savings & loans is not connected yet. The ACAO server needs its mobile sign-in update.',
+            statusCode: code);
+      }
+      if (code == 403) {
+        throw ApiException(
+            'Savings & loans is not set up for e-banking sign-in yet (the ACAO server must use AUTH_MODE=cyclos).',
+            statusCode: code);
+      }
       throw _error(e);
     }
   }
