@@ -42,6 +42,11 @@ class S {
     'success': {'en': 'Payment sent', 'fr': 'Paiement effectué'},
     'approvePrompt': {'en': 'Approve the MTN prompt on your phone', 'fr': 'Validez la demande MTN sur votre téléphone'},
     'loansSavings': {'en': 'Savings & loans', 'fr': 'Épargne et prêts'},
+    'sharesInvestments': {'en': 'Shares & investments', 'fr': 'Parts sociales et placements'},
+    'sharesInvestmentsHint': {
+      'en': 'Your shares, dividends and investments',
+      'fr': 'Vos parts, dividendes et placements',
+    },
     'loansSavingsHint': {
       'en': 'ACAO savings, loan applications and repayments',
       'fr': 'Épargne ACAO, demandes de prêt et remboursements',

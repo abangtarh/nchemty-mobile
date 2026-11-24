@@ -84,4 +84,54 @@ void main() {
     });
     expect(q.totalPayout, 12030);
   });
+
+  test('share statement from /shares/me', () {
+    final s = AcaoShareStatement.fromJson({
+      'wallet': [
+        {'classCode': 'ORD', 'name': 'Ordinary', 'balance': 1500, 'price': 5000}
+      ],
+      'holdings': [
+        {
+          'code': 'ORD', 'name': 'Ordinary shares', 'kind': 'membership', 'nominalValue': 5000,
+          'priceMode': 'fixed', 'minUnits': 1, 'maxUnits': 100, 'active': true, 'price': 5000,
+          'available': null, 'units': 4, 'value': 20000, 'paidIn': 20000, 'pendingOut': 0,
+        }
+      ],
+      'movements': [
+        {'classCode': 'ORD', 'kind': 'subscribe', 'units': 4, 'unitPrice': 5000, 'amount': 20000,
+         'certificateNo': 'SC-2026-000012', 'date': '2026-11-02'}
+      ],
+      'requests': [
+        {'reference': 'SHR-SUB-1', 'kind': 'subscribe', 'status': 'requested', 'classCode': 'ORD', 'units': 2, 'mine': true},
+        {'reference': 'SHR-TR-9', 'kind': 'transfer', 'status': 'awaiting_buyer', 'classCode': 'ORD', 'units': 1, 'mine': false},
+      ],
+      'dividends': [
+        {'reference': 'DIV-2025', 'classCode': 'ORD', 'periodStart': '2025-01-01', 'periodEnd': '2025-12-31',
+         'gross': 1200, 'tax': 180, 'net': 1020, 'status': 'approved'}
+      ],
+    });
+    expect(s.totalValue, 20000);
+    expect(s.holdings.single.cls.price, 5000);
+    expect(s.wallet['ORD'], 1500);
+    expect(s.movements.single.certificateNo, 'SC-2026-000012');
+    expect(s.requests.single.statusLabel, 'Waiting for approval'); // only my own
+    expect(s.dividends.single.net, 1020);
+  });
+
+  test('investment with payouts', () {
+    final i = AcaoInvestment.fromJson({
+      'id': '7', 'reference': 'INV-1', 'productCode': 'TB12', 'productName': 'Treasury 12m',
+      'amount': 500000, 'ratePa': 8, 'termMonths': 12, 'status': 'active', 'earlyExit': true,
+      'startDate': '2026-01-01', 'maturityDate': '2027-01-01',
+      'payments': [
+        {'kind': 'interest', 'dueOn': '2026-04-01', 'amount': 10000, 'status': 'paid'},
+        {'kind': 'interest', 'dueOn': '2026-07-01', 'amount': 10000, 'status': 'queued'},
+      ],
+    });
+    expect(i.interestPaid, 10000);
+    expect(i.earlyExit, isTrue);
+    final p = AcaoInvestmentProduct.fromJson(
+        {'code': 'TB12', 'name': 'Treasury 12m', 'termMonths': 12, 'ratePa': 8, 'minAmount': 100000, 'payout': 'quarterly'});
+    expect(p.payoutLabel, 'Interest paid quarterly');
+  });
 }

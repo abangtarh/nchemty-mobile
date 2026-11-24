@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'data/cyclos/cyclos_qr_api.dart';
 import 'features/acao/acao_apply_screens.dart';
 import 'features/acao/savings_loans_screen.dart';
+import 'features/acao/shares_investments_screen.dart';
 import 'features/agents/find_agent_screen.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/inbox/inbox_screen.dart';
@@ -73,6 +74,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/acao',
         builder: (_, s) =>
             SavingsLoansScreen(initialTab: s.uri.queryParameters['tab'] == 'loans' ? 1 : 0),
+      ),
+      GoRoute(
+        path: '/acao/holdings',
+        builder: (_, s) =>
+            SharesInvestmentsScreen(initialTab: s.uri.queryParameters['tab'] == 'investments' ? 1 : 0),
       ),
       GoRoute(path: '/acao/savings/apply', builder: (_, __) => const SavingsApplyScreen()),
       GoRoute(path: '/acao/loans/apply', builder: (_, __) => const LoanApplyScreen()),

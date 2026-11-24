@@ -24,6 +24,12 @@ Developer: Abang (Sure Engineering & Technologies). Develops on Windows 11
   applications/early withdrawal, loan applications/loans/schedule. Loan rate is
   set by Nchemty (`LOAN_DEFAULT_RATE_PA` on the server), not by the member.
   The old Payment Hub `/v1` client and the Cyclos "Services" list were removed.
+- **Shares & investments**: same ACAO hub, member routes `/shares/*` and
+  `/investments/*` (Acao PR #1, branch `ops-hub/teller-cash`, must be deployed).
+  Holdings, wallet, dividends, history + certificate PDFs, buy shares; investment
+  products, my investments + payouts, invest, cancel, close early; statement PDF
+  built in the app (`features/acao/holdings_pdf.dart`). Step-up headers are only
+  required for device-bound tokens; the app's Cyclos-session token has none.
 - **Push notifications**: Firebase project `nchemty-d07fd` (same as the old
   published apps). Options in `lib/core/push/firebase_options.dart`; the app
   registers its FCM token with Cyclos (`/firebase/fcm-tokens`) after sign-in

@@ -76,6 +76,7 @@ class HomeScreen extends ConsumerWidget {
                       if (v == 'privacy') openLegalPage(context, Env.privacyUrl);
                       if (v == 'close') openLegalPage(context, Env.accountClosureUrl);
                       if (v == 'products') context.push('/acao');
+                      if (v == 'holdings') context.push('/acao/holdings');
                       if (v == 'logout') ref.read(authProvider.notifier).logout();
                       if (v == 'lang') {
                         final isEn = ref.read(localeProvider).languageCode == 'en';
@@ -90,6 +91,7 @@ class HomeScreen extends ConsumerWidget {
                       PopupMenuItem(value: 'self', child: Text(s.t('betweenAccounts'))),
                       PopupMenuItem(value: 'statement', child: Text(s.t('statements'))),
                       PopupMenuItem(value: 'products', child: Text(s.t('loansSavings'))),
+                      PopupMenuItem(value: 'holdings', child: Text(s.t('sharesInvestments'))),
                       PopupMenuItem(value: 'kyc', child: Text(s.t('verifyId'))),
                       const PopupMenuItem(value: 'lang', child: Text('English / Français')),
                       PopupMenuItem(value: 'terms', child: Text(s.t('termsLink'))),
@@ -208,6 +210,21 @@ class HomeScreen extends ConsumerWidget {
                   subtitle: Text(s.t('loansSavingsHint')),
                   trailing: const Icon(Icons.chevron_right, color: AppColors.muted),
                   onTap: () => context.push('/acao'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: AppColors.goldLight,
+                    foregroundColor: AppColors.greenDark,
+                    child: Icon(Icons.pie_chart_outline),
+                  ),
+                  title: Text(s.t('sharesInvestments'),
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text(s.t('sharesInvestmentsHint')),
+                  trailing: const Icon(Icons.chevron_right, color: AppColors.muted),
+                  onTap: () => context.push('/acao/holdings'),
                 ),
               ),
               const SizedBox(height: 8),

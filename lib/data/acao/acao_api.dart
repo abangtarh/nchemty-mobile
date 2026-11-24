@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -395,3 +397,418 @@ class AcaoApi {
 }
 
 final acaoApiProvider = Provider<AcaoApi>((ref) => AcaoApi(ref.watch(sessionHolderProvider)));
+
+// ── Shares ────────────────────────────────────────────────────────────────
+
+class AcaoShareClass {
+  const AcaoShareClass({
+    required this.code,
+    required this.name,
+    required this.kind,
+    required this.price,
+    required this.priceMode,
+    required this.minUnits,
+    required this.active,
+    this.maxUnits,
+    this.available,
+    this.redeemable = true,
+    this.transferable = false,
+  });
+  final String code;
+  final String name;
+
+  /// membership / investment
+  final String kind;
+  final num price;
+  final String priceMode;
+  final int minUnits;
+  final int? maxUnits;
+
+  /// Shares still available to issue (null = unlimited).
+  final int? available;
+  final bool active;
+  final bool redeemable;
+  final bool transferable;
+
+  factory AcaoShareClass.fromJson(Map<String, dynamic> j) => AcaoShareClass(
+        code: '${j['code']}',
+        name: '${j['name'] ?? j['code']}',
+        kind: '${j['kind'] ?? ''}',
+        price: _n(j['price'] ?? j['nominalValue']),
+        priceMode: '${j['priceMode'] ?? 'fixed'}',
+        minUnits: _n(j['minUnits']).toInt(),
+        maxUnits: _nOrNull(j['maxUnits'])?.toInt(),
+        available: _nOrNull(j['available'])?.toInt(),
+        active: j['active'] != false,
+        redeemable: j['redeemable'] != false,
+        transferable: j['transferable'] == true,
+      );
+}
+
+class AcaoHolding {
+  const AcaoHolding({required this.cls, required this.units, required this.value, required this.paidIn, this.pendingOut = 0});
+  final AcaoShareClass cls;
+  final int units;
+  final num value;
+  final num paidIn;
+  final int pendingOut;
+}
+
+class AcaoShareMovement {
+  const AcaoShareMovement({
+    required this.classCode,
+    required this.kind,
+    required this.units,
+    required this.amount,
+    this.unitPrice,
+    this.certificateNo,
+    this.date,
+  });
+  final String classCode;
+
+  /// subscribe / redeem / transfer_in / transfer_out / adjustment
+  final String kind;
+  final int units;
+  final num amount;
+  final num? unitPrice;
+  final String? certificateNo;
+  final String? date;
+
+  String get label => switch (kind) {
+        'subscribe' => 'Bought',
+        'redeem' => 'Sold back',
+        'transfer_in' => 'Bought from a member',
+        'transfer_out' => 'Sold to a member',
+        'adjustment' => 'Adjustment',
+        _ => kind,
+      };
+}
+
+class AcaoShareRequest {
+  const AcaoShareRequest({
+    required this.reference,
+    required this.kind,
+    required this.status,
+    required this.classCode,
+    this.units,
+    this.amount,
+    this.note,
+  });
+  final String reference;
+  final String kind;
+  final String status;
+  final String classCode;
+  final int? units;
+  final num? amount;
+  final String? note;
+
+  String get kindLabel => switch (kind) {
+        'subscribe' => 'Buy',
+        'redeem' => 'Sell back',
+        'transfer' => 'Sell to a member',
+        'topup' => 'Put towards shares',
+        'wallet_refund' => 'Take back from wallet',
+        _ => kind,
+      };
+
+  String get statusLabel => switch (status) {
+        'requested' => 'Waiting for approval',
+        'awaiting_buyer' => 'Waiting for the buyer',
+        'executed' => 'Done',
+        'rejected' => 'Refused',
+        'cancelled' => 'Cancelled',
+        _ => status,
+      };
+}
+
+class AcaoDividend {
+  const AcaoDividend({
+    required this.reference,
+    required this.classCode,
+    required this.gross,
+    required this.tax,
+    required this.net,
+    this.periodStart,
+    this.periodEnd,
+    this.status,
+  });
+  final String reference;
+  final String classCode;
+  final num gross;
+  final num tax;
+  final num net;
+  final String? periodStart;
+  final String? periodEnd;
+  final String? status;
+}
+
+class AcaoShareStatement {
+  const AcaoShareStatement({
+    required this.holdings,
+    required this.wallet,
+    required this.movements,
+    required this.requests,
+    required this.dividends,
+  });
+  final List<AcaoHolding> holdings;
+
+  /// classCode → money waiting to become whole shares.
+  final Map<String, num> wallet;
+  final List<AcaoShareMovement> movements;
+  final List<AcaoShareRequest> requests;
+  final List<AcaoDividend> dividends;
+
+  num get totalValue => holdings.fold<num>(0, (t, h) => t + h.value);
+
+  factory AcaoShareStatement.fromJson(Map<String, dynamic> j) {
+    List<Map<String, dynamic>> l(String k) =>
+        [for (final e in (j[k] as List?) ?? const []) (e as Map).cast<String, dynamic>()];
+    return AcaoShareStatement(
+      holdings: [
+        for (final h in l('holdings'))
+          AcaoHolding(
+            cls: AcaoShareClass.fromJson(h),
+            units: _n(h['units']).toInt(),
+            value: _n(h['value']),
+            paidIn: _n(h['paidIn']),
+            pendingOut: _n(h['pendingOut']).toInt(),
+          ),
+      ],
+      wallet: {for (final w in l('wallet')) '${w['classCode']}': _n(w['balance'])},
+      movements: [
+        for (final m in l('movements'))
+          AcaoShareMovement(
+            classCode: '${m['classCode']}',
+            kind: '${m['kind']}',
+            units: _n(m['units']).toInt(),
+            amount: _n(m['amount']),
+            unitPrice: _nOrNull(m['unitPrice']),
+            certificateNo: m['certificateNo'] as String?,
+            date: m['date'] as String?,
+          ),
+      ],
+      requests: [
+        for (final r in l('requests'))
+          if (r['mine'] != false)
+            AcaoShareRequest(
+              reference: '${r['reference'] ?? ''}',
+              kind: '${r['kind']}',
+              status: '${r['status']}',
+              classCode: '${r['classCode']}',
+              units: _nOrNull(r['units'])?.toInt(),
+              amount: _nOrNull(r['amount']),
+              note: (r['decisionNote'] ?? r['reason']) as String?,
+            ),
+      ],
+      dividends: [
+        for (final d in l('dividends'))
+          AcaoDividend(
+            reference: '${d['reference'] ?? ''}',
+            classCode: '${d['classCode']}',
+            gross: _n(d['gross']),
+            tax: _n(d['tax']),
+            net: _n(d['net']),
+            periodStart: d['periodStart'] as String?,
+            periodEnd: d['periodEnd'] as String?,
+            status: d['status'] as String?,
+          ),
+      ],
+    );
+  }
+}
+
+// ── Investments ───────────────────────────────────────────────────────────
+
+class AcaoInvestmentProduct {
+  const AcaoInvestmentProduct({
+    required this.code,
+    required this.name,
+    required this.termMonths,
+    required this.ratePa,
+    required this.minAmount,
+    this.maxAmount,
+    this.description,
+    this.payout,
+    this.earlyExit = false,
+    this.penaltyPct = 0,
+    this.closesOn,
+  });
+  final String code;
+  final String name;
+  final int termMonths;
+  final num ratePa;
+  final num minAmount;
+  final num? maxAmount;
+  final String? description;
+
+  /// e.g. monthly / quarterly / at_maturity
+  final String? payout;
+  final bool earlyExit;
+  final num penaltyPct;
+  final String? closesOn;
+
+  String get payoutLabel => switch (payout) {
+        'monthly' => 'Interest paid monthly',
+        'quarterly' => 'Interest paid quarterly',
+        'annually' || 'yearly' => 'Interest paid yearly',
+        'maturity' || 'at_maturity' => 'Interest paid at maturity',
+        null => '',
+        _ => 'Interest paid ${payout!.replaceAll('_', ' ')}',
+      };
+
+  factory AcaoInvestmentProduct.fromJson(Map<String, dynamic> j) => AcaoInvestmentProduct(
+        code: '${j['code']}',
+        name: '${j['name'] ?? j['code']}',
+        termMonths: _n(j['termMonths']).toInt(),
+        ratePa: _n(j['ratePa']),
+        minAmount: _n(j['minAmount']),
+        maxAmount: _nOrNull(j['maxAmount']),
+        description: j['description'] as String?,
+        payout: j['payout'] as String?,
+        earlyExit: j['earlyExit'] == true,
+        penaltyPct: _n(j['penaltyPct']),
+        closesOn: j['closesOn'] as String?,
+      );
+}
+
+class AcaoInvestmentPayment {
+  const AcaoInvestmentPayment({required this.kind, required this.amount, required this.status, this.dueOn});
+  final String kind;
+  final num amount;
+  final String status;
+  final String? dueOn;
+}
+
+class AcaoInvestment {
+  const AcaoInvestment({
+    required this.id,
+    required this.reference,
+    required this.productName,
+    required this.amount,
+    required this.status,
+    this.ratePa,
+    this.termMonths,
+    this.startDate,
+    this.maturityDate,
+    this.exitRequested = false,
+    this.earlyExit = false,
+    this.note,
+    this.payments = const [],
+  });
+  final String id;
+  final String reference;
+  final String productName;
+  final num amount;
+
+  /// requested / active / matured / closed / rejected / cancelled
+  final String status;
+  final num? ratePa;
+  final int? termMonths;
+  final String? startDate;
+  final String? maturityDate;
+  final bool exitRequested;
+  final bool earlyExit;
+  final String? note;
+  final List<AcaoInvestmentPayment> payments;
+
+  num get interestPaid =>
+      payments.where((p) => p.kind == 'interest' && p.status == 'paid').fold<num>(0, (t, p) => t + p.amount);
+
+  factory AcaoInvestment.fromJson(Map<String, dynamic> j) => AcaoInvestment(
+        id: '${j['id']}',
+        reference: '${j['reference'] ?? ''}',
+        productName: '${j['productName'] ?? j['productCode'] ?? 'Investment'}',
+        amount: _n(j['amount']),
+        status: '${j['status'] ?? ''}',
+        ratePa: _nOrNull(j['ratePa']),
+        termMonths: _nOrNull(j['termMonths'])?.toInt(),
+        startDate: j['startDate'] as String?,
+        maturityDate: j['maturityDate'] as String?,
+        exitRequested: j['exitRequested'] == true,
+        earlyExit: j['earlyExit'] == true,
+        note: j['decisionNote'] as String?,
+        payments: [
+          for (final p in (j['payments'] as List?) ?? const [])
+            AcaoInvestmentPayment(
+              kind: '${(p as Map)['kind']}',
+              amount: _n(p['amount']),
+              status: '${p['status'] ?? ''}',
+              dueOn: p['dueOn'] as String?,
+            ),
+        ],
+      );
+}
+
+extension AcaoSharesInvestments on AcaoApi {
+  Future<List<AcaoShareClass>> shareClasses() => _authed((o) async {
+        final r = await _dio.get<List<dynamic>>('/shares/classes', options: o);
+        return _list(r.data).map(AcaoShareClass.fromJson).toList();
+      });
+
+  Future<AcaoShareStatement> myShares() => _authed((o) async {
+        final r = await _dio.get<Map<String, dynamic>>('/shares/me', options: o);
+        return AcaoShareStatement.fromJson(r.data!);
+      });
+
+  /// Asks to buy [units] shares; approved by staff, then paid from the account.
+  Future<String> buyShares(String classCode, int units) => _authed((o) async {
+        final r = await _dio.post<Map<String, dynamic>>('/shares/subscribe',
+            data: {'classCode': classCode, 'units': units}, options: o);
+        return '${r.data?['reference'] ?? ''}';
+      });
+
+  /// Puts an amount towards shares (share wallet): becomes shares when it can.
+  Future<String> topUpShares(String classCode, num amount) => _authed((o) async {
+        final r = await _dio.post<Map<String, dynamic>>('/shares/topup',
+            data: {'classCode': classCode, 'amount': amount}, options: o);
+        return '${r.data?['reference'] ?? ''}';
+      });
+
+  /// Share certificate PDF (issued for each purchase).
+  Future<Uint8List> shareCertificate(String certificateNo) => _authed((o) async {
+        final r = await _dio.get<List<int>>(
+          '/shares/certificates/${Uri.encodeComponent(certificateNo)}',
+          options: o.copyWith(responseType: ResponseType.bytes, headers: {
+            ...?o.headers,
+            'Accept': 'application/pdf',
+          }),
+        );
+        return Uint8List.fromList(r.data ?? const []);
+      });
+
+  Future<List<AcaoInvestmentProduct>> investmentProducts() => _authed((o) async {
+        final r = await _dio.get<List<dynamic>>('/investments/products', options: o);
+        return _list(r.data).map(AcaoInvestmentProduct.fromJson).toList();
+      });
+
+  Future<List<AcaoInvestment>> myInvestments() => _authed((o) async {
+        final r = await _dio.get<List<dynamic>>('/investments/me', options: o);
+        return _list(r.data).map(AcaoInvestment.fromJson).toList();
+      });
+
+  Future<String> invest(String productCode, num amount) => _authed((o) async {
+        final r = await _dio.post<Map<String, dynamic>>('/investments/subscribe',
+            data: {'productCode': productCode, 'amount': amount}, options: o);
+        return '${r.data?['reference'] ?? ''}';
+      });
+
+  Future<void> cancelInvestment(String id) => _authed((o) async {
+        await _dio.post<void>('/investments/${Uri.encodeComponent(id)}/cancel', options: o);
+      });
+
+  /// Asks to close early. Returns what leaving pays: capital, unpaid
+  /// interest, what is forfeited, total.
+  Future<({num capital, num interest, num forfeited, num total})> exitInvestment(String id) =>
+      _authed((o) async {
+        final r = await _dio.post<Map<String, dynamic>>(
+            '/investments/${Uri.encodeComponent(id)}/exit',
+            options: o);
+        final d = r.data ?? const {};
+        return (
+          capital: _n(d['capital']),
+          interest: _n(d['interestUnpaid']),
+          forfeited: _n(d['forfeited']),
+          total: _n(d['total']),
+        );
+      });
+}
