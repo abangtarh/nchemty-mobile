@@ -1,0 +1,91 @@
+# Codemagic CI: iOS → TestFlight, Android → Play internal track.
+# Set up once in Codemagic (Teams → your team):
+#  - Environment group "nchemty_prod" with: CYCLOS_URL, HUB_URL
+#    (https://<platform host>/api/v1/app), HUB_ENABLED (true/false)
+#  - Integrations → App Store Connect API key named "nchemty_asc"
+#  - Code signing: iOS distribution certificate + App Store profile for
+#    com.nchemty.ebank; Android upload keystore with reference "nchemty_upload"
+#  - Environment group "google_play" with GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+# Nothing secret lives in this file or in the repository.
+workflows:
+  ios-testflight:
+    name: iOS → TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: nchemty_asc
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      groups: [nchemty_prod]
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.nchemty.ebank
+    triggering:
+      events: [tag]
+      tag_patterns:
+        - pattern: 'v*'
+    scripts:
+      - name: Dependencies
+        script: flutter pub get
+      - name: Analyse and test
+        script: |
+          flutter analyze
+          flutter test
+      - name: Signing
+        script: xcode-project use-profiles
+      - name: Build IPA
+        script: |
+          BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" || echo 1) + 1))
+          flutter build ipa --release \
+            --build-number=$BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist \
+            --dart-define=FLAVOR=prod \
+            --dart-define=CYCLOS_URL=$CYCLOS_URL \
+            --dart-define=HUB_URL=$HUB_URL \
+            --dart-define=HUB_ENABLED=$HUB_ENABLED
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+    # APP_STORE_APPLE_ID = 6757865496 (the live "Nchemty" app); set it in nchemty_prod.
+
+  android-internal:
+    name: Android → Play internal track
+    max_build_duration: 45
+    instance_type: linux_x2
+    environment:
+      flutter: stable
+      groups: [nchemty_prod, google_play]
+      android_signing:
+        - nchemty_upload
+    triggering:
+      events: [tag]
+      tag_patterns:
+        - pattern: 'v*'
+    scripts:
+      - name: Dependencies
+        script: flutter pub get
+      - name: Analyse and test
+        script: |
+          flutter analyze
+          flutter test
+      - name: Build app bundle
+        script: |
+          LATEST=$(google-play get-latest-build-number --package-name com.nchemty.ebank --tracks internal,production || echo 1)
+          flutter build appbundle --release \
+            --build-number=$((LATEST + 1)) \
+            --dart-define=FLAVOR=prod \
+            --dart-define=CYCLOS_URL=$CYCLOS_URL \
+            --dart-define=HUB_URL=$HUB_URL \
+            --dart-define=HUB_ENABLED=$HUB_ENABLED
+    artifacts:
+      - build/app/outputs/bundle/release/*.aab
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        submit_as_draft: true

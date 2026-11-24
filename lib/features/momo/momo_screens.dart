@@ -9,6 +9,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/money.dart';
 import '../../data/middleware/hub_api.dart';
 import '../../data/models/models.dart';
+import '../common/transaction_pin.dart';
 import '../common/widgets.dart';
 import '../home/home_providers.dart';
 
@@ -166,7 +167,9 @@ class _TopupScreenState extends ConsumerState<TopupScreen> {
 
 // ---------------------------------------------------------------------------
 
-/// Cash-out: quote (fee computed by the hub's tiered rules) -> PIN -> payout.
+/// Cash-out: quote (fee computed by the platform's tiered rules) -> PIN ->
+/// payout. The platform pays only to the member's registered number and says
+/// so if another number is entered.
 class CashoutScreen extends ConsumerStatefulWidget {
   const CashoutScreen({super.key});
   @override
@@ -220,6 +223,7 @@ class _CashoutScreenState extends ConsumerState<CashoutScreen> {
       setState(() => _quote = null);
       return _getQuote();
     }
+    if (!await ensureTransactionPin(context, ref) || !mounted) return;
     final pin = await askConfirmationPassword(context, title: S.read(ref).t('txPin'));
     if (pin == null || pin.isEmpty || !mounted) return;
     setState(() {
@@ -262,6 +266,7 @@ class _CashoutScreenState extends ConsumerState<CashoutScreen> {
       // A rejected PIN moved no money; use a fresh key so the hub does not
       // replay the stored "wrong PIN" result when the member retries.
       if (e.isWrongConfirmation) _idempotencyKey = HubApi.newIdempotencyKey();
+      if (e.code == 'PIN_NOT_SET') forgetTransactionPinState(ref);
       if (mounted) {
         setState(() => _error =
             e.isWrongConfirmation ? 'Wrong transaction PIN.' : e.message);

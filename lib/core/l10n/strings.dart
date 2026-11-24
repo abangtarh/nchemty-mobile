@@ -38,6 +38,17 @@ class S {
     'fee': {'en': 'Fee', 'fr': 'Frais'},
     'total': {'en': 'Total debited', 'fr': 'Total débité'},
     'txPin': {'en': 'Transaction PIN', 'fr': 'Code de transaction'},
+    'createTxPin': {'en': 'Create your transaction PIN', 'fr': 'Créez votre code de transaction'},
+    'createTxPinHelp': {
+      'en': 'Choose 6 digits to confirm mobile money, loan and savings operations. It is different from the PIN that unlocks the app. Avoid 123456 or your birth date.',
+      'fr': 'Choisissez 6 chiffres pour confirmer les opérations mobile money, crédit et épargne. Il est différent du code qui déverrouille l\'application. Évitez 123456 ou votre date de naissance.'
+    },
+    'repeatTxPin': {'en': 'Repeat the PIN', 'fr': 'Répétez le code'},
+    'pinsDiffer': {'en': 'The two PINs are different.', 'fr': 'Les deux codes sont différents.'},
+    'applyLoan': {'en': 'Apply for a new loan', 'fr': 'Demander un crédit'},
+    'loanRequestSent': {'en': 'Request sent. A credit officer will contact you.', 'fr': 'Demande envoyée. Un agent de crédit vous contactera.'},
+    'months': {'en': 'Months', 'fr': 'Mois'},
+    'purpose': {'en': 'Purpose', 'fr': 'Objet'},
     'done': {'en': 'Done', 'fr': 'Terminé'},
     'success': {'en': 'Payment sent', 'fr': 'Paiement effectué'},
     'momoNumber': {'en': 'MoMo number', 'fr': 'Numéro MoMo'},

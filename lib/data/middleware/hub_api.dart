@@ -8,9 +8,11 @@ import '../../core/network/api_exception.dart';
 import '../../core/network/dio_factory.dart';
 import '../models/models.dart';
 
-/// Calls to the Node middleware / Payment Hub (`/v1`). The contract is in
-/// docs/middleware-contract.md. The hub resolves the member from the
-/// forwarded Cyclos session token; the app never sends a member id.
+/// Calls to the middleware contract in docs/middleware-contract.md, served by
+/// the Unified Banking Platform at `/api/v1/app`. The platform resolves the
+/// member from the forwarded Cyclos session token; the app never sends a
+/// member id. Money moves are confirmed with the member's 6-digit
+/// transaction PIN (created once, see [pinIsSet] / [setPin]).
 class HubApi {
   HubApi(this._dio);
   final Dio _dio;
@@ -29,6 +31,18 @@ class HubApi {
     return List.generate(16, (_) => rnd.nextInt(256).toRadixString(16).padLeft(2, '0'))
         .join();
   }
+
+  // ---- Transaction PIN (platform) ----
+
+  /// Whether the member already created their 6-digit transaction PIN.
+  Future<bool> pinIsSet() => _guard(() async {
+        final res = await _dio.get<Map<String, dynamic>>('/pin');
+        return res.data!['set'] == true;
+      });
+
+  /// Creates the transaction PIN (only once; changing it needs the branch).
+  Future<void> setPin(String pin) =>
+      _guard(() => _dio.post<void>('/pin', data: {'pin': pin}));
 
   // ---- MoMo ----
 
@@ -87,15 +101,16 @@ class HubApi {
             .toList();
       });
 
+  /// Sends a loan request; a credit officer follows up (no money moves).
   Future<Map<String, dynamic>> applyForLoan({
-    required String productCode,
+    String? productCode,
     required int amount,
     required int termMonths,
     String? purpose,
   }) =>
       _guard(() async {
         final res = await _dio.post<Map<String, dynamic>>('/loans/apply', data: {
-          'productCode': productCode,
+          if (productCode != null) 'productCode': productCode,
           'amount': amount,
           'termMonths': termMonths,
           if (purpose != null) 'purpose': purpose,
@@ -145,7 +160,21 @@ class HubApi {
                 Options(headers: {'Confirmation-Password': confirmationPassword}),
           ));
 
-  // ---- KYC (existing 7-stage pipeline, OCR server-side) ----
+  /// Adds money to an open savings plan from the main account.
+  Future<void> depositToSavings({
+    required String planId,
+    required int amount,
+    required String confirmationPassword,
+  }) =>
+      _guard(() => _dio.post<void>(
+            '/savings/$planId/deposit',
+            data: {'amount': amount},
+            options:
+                Options(headers: {'Confirmation-Password': confirmationPassword}),
+          ));
+
+  // ---- KYC (existing 7-stage pipeline, OCR server-side). Not served by the
+  // platform yet: kept behind Env.kycEnabled. ----
 
   Future<String> startKyc() => _guard(() async {
         final res = await _dio.post<Map<String, dynamic>>('/kyc/session');

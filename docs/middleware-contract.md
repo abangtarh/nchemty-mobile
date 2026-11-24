@@ -1,4 +1,31 @@
-# Middleware `/v1` contract (proposed)
+# Middleware contract
+
+> **Served by the Unified Banking Platform** (`abangtarh/unified-banking-platform`,
+> v0.20.0+) at **`/api/v1/app`**: set `--dart-define=HUB_URL=https://<platform host>/api/v1/app`
+> and `HUB_ENABLED=true`. What the platform does differently from the first
+> proposal below:
+>
+> - **Transaction PIN.** The platform cannot check the member's Cyclos
+>   transaction password, so `Confirmation-Password` carries the member's
+>   own **6-digit transaction PIN**, created once in the app:
+>   `GET /pin` → `{ set }`, `POST /pin` `{ pin }` (409 `PIN_ALREADY_SET` if it exists).
+>   A money call without a PIN answers **409 `PIN_NOT_SET`**; a wrong PIN
+>   answers **403 `invalidPassword`** (never 401, which means the Cyclos
+>   session is gone). Forgotten PIN: reset at the branch.
+> - **Cash-out** goes only to the member's registered mobile number (422
+>   `ownNumberOnly` otherwise). Quotes are signed and expire after 5 minutes.
+>   Top-ups may come from another wallet: its owner approves on their phone.
+> - **Savings** products are listed per product *and* term: `code` is
+>   `PRODUCT:TERM` (e.g. `DAILY:M6`). Subscribing creates an application:
+>   fees are taken at once and the plan opens when the branch approves.
+>   `POST /savings/{planId}/deposit` `{ amount }` adds money to an open plan.
+> - **Loans:** `POST /loans/apply` records a request (`{ reference, status: "received" }`);
+>   a credit officer turns it into an application in the back office.
+>   `/loans/{id}/accept` is not used.
+> - **KYC** routes are not served yet: keep `KYC_ENABLED=false`.
+> - Rate limit: 120 requests a minute per session (429 with `Retry-After`).
+
+## Original proposal
 
 The app calls these routes on the Node middleware / Payment Hub. They are new:
 build them on top of the current MoMo bridge, LoanCoreLib / ACAOCoreLib

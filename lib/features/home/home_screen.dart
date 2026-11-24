@@ -45,7 +45,7 @@ class HomeScreen extends ConsumerWidget {
                     tooltip: 'Menu',
                     onSelected: (v) {
                       if (v == 'kyc') {
-                        Env.hubEnabled
+                        Env.kycEnabled
                             ? context.push('/kyc')
                             : showComingSoon(context, s.t('verifyId'));
                       }

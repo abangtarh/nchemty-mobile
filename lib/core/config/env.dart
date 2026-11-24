@@ -13,10 +13,12 @@ class Env {
     defaultValue: 'https://ebank.nchemty.com/api',
   );
 
-  /// Node middleware / Payment Hub base, ending in /v1.
+  /// Middleware contract base: the Unified Banking Platform's app gateway,
+  /// ending in /api/v1/app (no trailing slash). Set the real host per
+  /// environment with --dart-define=HUB_URL=...
   static const hubBaseUrl = String.fromEnvironment(
     'HUB_URL',
-    defaultValue: 'https://brg1.nchemty.com/v1',
+    defaultValue: 'https://api.nchemty.com/api/v1/app',
   );
 
   /// Cyclos channel internal name used for mobile sessions.
@@ -27,11 +29,16 @@ class Env {
   static const mainAccountType =
       String.fromEnvironment('MAIN_ACCOUNT_TYPE', defaultValue: 'member');
 
-  /// Off until the hub's /v1 routes are deployed: MoMo, loans, savings and
-  /// KYC then show "coming soon" instead of failing.
-  /// Turn on with --dart-define=HUB_ENABLED=true.
+  /// MoMo, loans and savings through the platform's app gateway. Off by
+  /// default so a build without HUB_URL shows "coming soon" instead of
+  /// failing. Turn on with --dart-define=HUB_ENABLED=true.
   static const hubEnabled =
       bool.fromEnvironment('HUB_ENABLED', defaultValue: false);
+
+  /// Identity re-verification in the app (selfie + ID). The platform does not
+  /// serve these routes yet; members verify through onboarding or a branch.
+  static const kycEnabled =
+      bool.fromEnvironment('KYC_ENABLED', defaultValue: false);
 
   static const idleLockAfter = Duration(minutes: 5);
   static const backgroundLockAfter = Duration(seconds: 60);

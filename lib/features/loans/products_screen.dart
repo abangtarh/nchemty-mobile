@@ -8,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/money.dart';
 import '../../data/middleware/hub_api.dart';
 import '../../data/models/models.dart';
+import '../common/transaction_pin.dart';
 import '../common/widgets.dart';
 import '../home/home_providers.dart';
 
@@ -53,10 +54,8 @@ class ProductsScreen extends ConsumerWidget {
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
               icon: const Icon(Icons.add),
-              label: const Text('Apply for a new loan'),
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Loan application form: phase 3')),
-              ),
+              label: Text(s.t('applyLoan')),
+              onPressed: () => _applyForLoan(context, ref),
             ),
             const SizedBox(height: 24),
             const Text('ACAO Daily Saver',
@@ -101,6 +100,52 @@ class ProductsScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _applyForLoan(BuildContext context, WidgetRef ref) async {
+    final s = S.read(ref);
+    final amount = TextEditingController();
+    final months = TextEditingController(text: '12');
+    final purpose = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(s.t('applyLoan')),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+              controller: amount,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: '${s.t('amount')} (XAF)')),
+          TextField(
+              controller: months,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: s.t('months'))),
+          TextField(controller: purpose, decoration: InputDecoration(labelText: s.t('purpose'))),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(s.t('continue'))),
+        ],
+      ),
+    );
+    final a = Money.fromInput(amount.text);
+    final m = int.tryParse(months.text.trim());
+    final p = purpose.text.trim();
+    // Not disposed here: the dialog's fields are still mounted during its
+    // closing animation (see the note on _ConfirmationSheet).
+    if (ok != true || a == null || a <= 0 || m == null || m <= 0 || !context.mounted) return;
+    try {
+      await ref.read(hubApiProvider).applyForLoan(
+          amount: a, termMonths: m, purpose: p.isEmpty ? null : p);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(s.t('loanRequestSent'))));
+      }
+    } on ApiException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
   Future<void> _subscribe(
       BuildContext context, WidgetRef ref, SavingsProduct p) async {
     final accepted = await showDialog<bool>(
@@ -116,7 +161,8 @@ class ProductsScreen extends ConsumerWidget {
       ),
     );
     if (accepted != true || !context.mounted) return;
-    final pin = await askConfirmationPassword(context);
+    if (!await ensureTransactionPin(context, ref) || !context.mounted) return;
+    final pin = await askConfirmationPassword(context, title: S.read(ref).t('txPin'));
     if (pin == null || pin.isEmpty || !context.mounted) return;
     try {
       await ref.read(hubApiProvider).subscribeSavings(
@@ -129,7 +175,10 @@ class ProductsScreen extends ConsumerWidget {
       if (!context.mounted) return;
       ref.invalidate(savingsProvider);
       ref.invalidate(accountsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Application received. The plan opens when the branch approves it.')));
     } on ApiException catch (e) {
+      if (e.code == 'PIN_NOT_SET') forgetTransactionPinState(ref);
       if (context.mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.message)));
@@ -195,6 +244,7 @@ class _LoanCard extends ConsumerWidget {
 
   Future<void> _repay(BuildContext context, WidgetRef ref) async {
     final amount = (loan.nextDueAmount ?? loan.outstanding).round();
+    if (!await ensureTransactionPin(context, ref) || !context.mounted) return;
     final pin = await askConfirmationPassword(context,
         title: 'Repay ${Money.xaf(amount)}');
     if (pin == null || pin.isEmpty || !context.mounted) return;
@@ -209,6 +259,7 @@ class _LoanCard extends ConsumerWidget {
       ref.invalidate(loansProvider);
       ref.invalidate(accountsProvider);
     } on ApiException catch (e) {
+      if (e.code == 'PIN_NOT_SET') forgetTransactionPinState(ref);
       if (context.mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.message)));

@@ -9,10 +9,13 @@ Developer: Abang (Sure Engineering & Technologies). Develops on Windows 11
   `Session-Token` header, `Channel: mobile`), accounts, history, member payments
   (preview → `POST /self/payments` with `Confirmation-Password` header), and
   **native Cyclos QR** via the Tickets API (`cyclos_qr_api.dart`).
-- **Node middleware / Payment Hub `/v1`** (`lib/data/middleware/hub_api.dart`):
-  MTN MoMo top-up/cash-out, loans (LoanCoreLib), ACAO DailySaver (ACAOCoreLib),
-  KYC. Contract in `docs/middleware-contract.md`. These routes are NOT built yet,
-  so those screens error at runtime until the hub exists.
+- **Unified Banking Platform app gateway** (`lib/data/middleware/hub_api.dart`,
+  base `HUB_URL` = `https://<platform>/api/v1/app`): MTN/Orange MoMo top-up and
+  cash-out, loans, savings. It implements `docs/middleware-contract.md` (see the
+  differences at the top of that file): money moves are confirmed with the
+  member's 6-digit **transaction PIN** created once in the app
+  (`lib/features/common/transaction_pin.dart`), not the Cyclos password.
+  KYC is not served yet (`KYC_ENABLED=false`).
 - Cyclos is the single source of truth for balances; the app never computes them.
 - Stack: Riverpod 2.x, go_router 14, dio 5, flutter_secure_storage, local_auth,
   image_picker, mobile_scanner. EN/FR strings in `lib/core/l10n/strings.dart`.
@@ -32,7 +35,7 @@ Developer: Abang (Sure Engineering & Technologies). Develops on Windows 11
   `POST /{owner}/operations/{op}/run` — a possible no-hub route for
   LoanCoreLib / ACAOCoreLib.
 - Device PINs (`/device-pins`) and FCM tokens (`/firebase/fcm-tokens`) exist.
-- Hub features are behind `--dart-define=HUB_ENABLED=true` (off by default).
+- Platform features are behind `--dart-define=HUB_ENABLED=true` (off by default); KYC behind `KYC_ENABLED`.
 
 ## Functional reference: official Cyclos frontend
 Workflows copy the official open-source frontend **cyclosproject/cyclos4-ui
@@ -67,19 +70,19 @@ Learned so far:
 ## Local setup status (Windows)
 Done: Flutter 3.47.7 / Dart 3.13 installed, Android toolchain OK, repo cloned,
 `flutter create` run, analyzer clean apart from items fixed in PR #1.
-Still to do, in order:
-1. Delete `test/widget_test.dart` (flutter create's demo test).
-2. Set app ID: `PRODUCT_BUNDLE_IDENTIFIER` → `com.nchemty.ebank` in
-   `ios/Runner.xcodeproj/project.pbxproj` (also the `.RunnerTests` variant);
-   `applicationId = "com.nchemty.ebank"` and `minSdk = 26` in
-   `android/app/build.gradle.kts` (leave `namespace` as generated).
-3. `MainActivity.kt` must extend `FlutterFragmentActivity` (local_auth needs it).
-4. AndroidManifest: `CAMERA` and `USE_BIOMETRIC` permissions.
-5. iOS `Info.plist`: `NSCameraUsageDescription`, `NSFaceIDUsageDescription`.
-6. `flutter analyze` + `flutter test` clean, then `flutter run` on an Android
-   phone with `--dart-define=CYCLOS_URL=... --dart-define=HUB_URL=...`.
-7. Commit `android/` and `ios/` on a branch and open a PR.
-8. Add `codemagic.yaml` for iOS → TestFlight and Android → Play internal track.
+Done: steps 1–5 and 7 (app ID `com.nchemty.ebank`, minSdk 26,
+FlutterFragmentActivity, permissions, Info.plist; PR #3). `codemagic.yaml`
+added (iOS → TestFlight, Android → Play internal, on tags `v*`); release
+signing reads Codemagic's `CM_KEYSTORE_*` or `android/key.properties`.
+Still to do:
+1. `flutter analyze` + `flutter test` on Windows (the platform branch was
+   written without a Flutter SDK), then `flutter run` on an Android phone with
+   `--dart-define=CYCLOS_URL=... --dart-define=HUB_URL=https://<platform>/api/v1/app --dart-define=HUB_ENABLED=true`.
+2. In Codemagic: environment groups `nchemty_prod` (CYCLOS_URL, HUB_URL,
+   HUB_ENABLED, APP_STORE_APPLE_ID) and `google_play`, the App Store Connect
+   key `nchemty_asc`, iOS signing for com.nchemty.ebank and the Android upload
+   keystore `nchemty_upload`.
+3. Confirm the live Play versionCode and App Store build before the first upload.
 
 ## Working rules
 - Never commit to `main`; branch + PR. Never commit keystores, `key.properties`,
